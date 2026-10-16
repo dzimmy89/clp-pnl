@@ -34,7 +34,7 @@ export default async function WalletPage({
         </p>
         <p className="text-muted mt-4 max-w-xl mx-auto leading-relaxed">
           This page will list every Uniswap V3 and V4 position {short} owns on{" "}
-          {CHAINS.filter((c) => c.chainId).map((c) => c.name).join(", ")}, with
+          {CHAINS.map((c) => c.name).join(", ")}, with
           live value, fees and range status.
         </p>
       </div>
