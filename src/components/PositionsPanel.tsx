@@ -82,11 +82,11 @@ export function PositionsPanel({ address }: { address: string }) {
               type="button"
               onClick={() => setFilter(c.key)}
               className={`eyebrow border px-3 py-1.5 ${filter === c.key ? "border-gold text-gold" : "border-line-soft text-muted"}`}
-              title={s.error ?? s.result?.warnings.join("; ")}
+              title={s.error ?? s.result?.error ?? s.result?.warnings.join("; ")}
             >
               {c.name}
               <span className={`ml-2 normal-case tracking-normal ${s.error ? "text-negative" : "text-faint"}`}>
-                {s.loading ? "…" : s.error ? "!" : n}
+                {s.loading ? "…" : s.error || s.result?.error ? "!" : n}
               </span>
             </button>
           );
@@ -97,7 +97,7 @@ export function PositionsPanel({ address }: { address: string }) {
         <ul className="mt-4 text-xs text-muted space-y-1">
           {CHAINS.flatMap((c) => {
             const s = state[c.key];
-            const items = s.error ? [s.error] : (s.result?.warnings ?? []);
+            const items = s.error ? [s.error] : s.result?.error ? [s.result.error] : (s.result?.warnings ?? []);
             return items.map((w, i) => (
               <li key={`${c.key}-${i}`}>
                 <span className="eyebrow mr-2">{c.name}</span>

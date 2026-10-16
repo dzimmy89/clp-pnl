@@ -1,7 +1,7 @@
 export function fmtUsd(v: number | null | undefined, opts: { sign?: boolean } = {}): string {
   if (v == null || !Number.isFinite(v)) return "—";
   const abs = Math.abs(v);
-  const digits = abs >= 1000 ? 0 : abs >= 1 ? 2 : 4;
+  const digits = abs >= 1000 ? 0 : abs >= 1 || abs === 0 ? 2 : 4;
   const s = abs.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
   const sign = v < 0 ? "−" : opts.sign && v > 0 ? "+" : "";
   return `${sign}$${s}`;
