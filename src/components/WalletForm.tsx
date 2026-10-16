@@ -38,7 +38,8 @@ export function WalletForm({ initial = "" }: { initial?: string }) {
         />
         <button
           type="submit"
-          className="eyebrow bg-gold text-[var(--charcoal)] px-6 py-3 hover:opacity-90 transition-opacity"
+          className="eyebrow bg-gold px-6 py-3 hover:opacity-90 transition-opacity"
+          style={{ color: "var(--charcoal)" }}
         >
           Read positions
         </button>
