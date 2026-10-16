@@ -45,8 +45,8 @@ export function getClient(key: ChainKey): PublicClient {
   if (!client) {
     client = createPublicClient({
       chain: VIEM_CHAINS[key],
-      transport: http(rpcUrl(key), { batch: true, timeout: 20_000 }),
-      batch: { multicall: { wait: 16 } },
+      transport: http(rpcUrl(key), { batch: false, timeout: 20_000, retryCount: 3 }),
+      batch: { multicall: { wait: 16, batchSize: 512 } },
     }) as PublicClient;
     clients.set(key, client);
   }

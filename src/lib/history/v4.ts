@@ -1,5 +1,6 @@
 import { decodeEventLog, numberToHex, parseAbiItem, zeroAddress, type Address, type Hex } from "viem";
 import { CHAIN_BY_KEY, type ChainKey } from "../chains";
+import { rpcLimit } from "../limit";
 import { getClient } from "../rpc";
 import type { Position } from "../types";
 import { v4StateViewAbi } from "../uniswap/abis";
@@ -57,8 +58,8 @@ export async function fetchV4History(chain: ChainKey, position: Position, owner:
       const [timestamp, gas, slot0, receipt] = await Promise.all([
         blockTimestamp(client, chain, l.blockNumber),
         txGas(client, chain, l.transactionHash),
-        client.readContract({ address: stateView, abi: v4StateViewAbi, functionName: "getSlot0", args: [poolId], blockNumber: l.blockNumber }),
-        client.getTransactionReceipt({ hash: l.transactionHash }),
+        rpcLimit(() => client.readContract({ address: stateView, abi: v4StateViewAbi, functionName: "getSlot0", args: [poolId], blockNumber: l.blockNumber })),
+        rpcLimit(() => client.getTransactionReceipt({ hash: l.transactionHash })),
       ]);
       const [price0Usd, price1Usd, nativeUsd] = await Promise.all([
         historicalPrice(chain, position.token0, timestamp),
