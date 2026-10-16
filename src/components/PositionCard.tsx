@@ -1,6 +1,10 @@
+"use client";
+
 import { CHAIN_BY_KEY } from "@/lib/chains";
 import { fmtAmount, fmtFee, fmtPrice, fmtUsd } from "@/lib/format";
+import type { PositionPnl } from "@/lib/history/types";
 import type { Position } from "@/lib/types";
+import { PnlPanel } from "./PnlPanel";
 
 /** Where the current price sits inside the range, 0..1, clamped. */
 function rangePosition(p: Position): number {
@@ -9,7 +13,15 @@ function rangePosition(p: Position): number {
   return Math.min(1, Math.max(0, (p.currentTick - p.tickLower) / span));
 }
 
-export function PositionCard({ p }: { p: Position }) {
+export function PositionCard({
+  p,
+  address,
+  onPnl,
+}: {
+  p: Position;
+  address: string;
+  onPnl?: (id: string, pnl: PositionPnl) => void;
+}) {
   const chain = CHAIN_BY_KEY[p.chain];
   const pos = rangePosition(p);
   const pair = `${p.token0.symbol} / ${p.token1.symbol}`;
@@ -84,6 +96,9 @@ export function PositionCard({ p }: { p: Position }) {
           </dd>
         </div>
       </dl>
+
+      <div className="h-px bg-line-soft" />
+      <PnlPanel address={address} position={p} onResult={(pnl) => onPnl?.(p.id, pnl)} />
     </article>
   );
 }

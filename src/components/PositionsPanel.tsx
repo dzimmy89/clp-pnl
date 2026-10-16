@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CHAINS, type ChainKey } from "@/lib/chains";
 import { fmtUsd } from "@/lib/format";
+import type { PositionPnl } from "@/lib/history/types";
 import type { ChainPositionsResult } from "@/lib/types";
 import { PositionCard } from "./PositionCard";
 
@@ -14,6 +15,7 @@ const initialState = () =>
 export function PositionsPanel({ address }: { address: string }) {
   const [state, setState] = useState<State>(initialState);
   const [filter, setFilter] = useState<ChainKey | "all">("all");
+  const [pnls, setPnls] = useState<Record<string, PositionPnl>>({});
 
   useEffect(() => {
     const ctrl = new AbortController();
@@ -43,6 +45,13 @@ export function PositionsPanel({ address }: { address: string }) {
   const unpriced = all.filter((p) => p.valueUsd == null).length;
   const closed = CHAINS.reduce((s, c) => s + (state[c.key].result?.closedCount ?? 0), 0);
 
+  const pnlRows = all.map((p) => pnls[p.id]).filter(Boolean);
+  const sumPnl = (k: "netPnlUsd" | "vsHodlUsd" | "impermanentLossUsd" | "totalFeesUsd") =>
+    pnlRows.length ? pnlRows.reduce((s, r) => s + (r[k] ?? 0), 0) : null;
+  const gasTotal = pnlRows.length ? pnlRows.reduce((s, r) => s + (r.history.gasUsd ?? 0), 0) : null;
+  const pnlPending = all.length - pnlRows.length;
+  const signed = (v: number | null) => (v == null ? "" : v >= 0 ? "text-positive" : "text-negative");
+
   return (
     <div>
       <dl className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-line-soft border border-line-soft">
@@ -58,7 +67,26 @@ export function PositionsPanel({ address }: { address: string }) {
           </div>
         ))}
       </dl>
+      <dl className="grid grid-cols-2 lg:grid-cols-5 gap-px bg-line-soft border border-line-soft border-t-0">
+        {(
+          [
+            ["Net PnL", sumPnl("netPnlUsd"), true],
+            ["vs. holding", sumPnl("vsHodlUsd"), true],
+            ["Impermanent loss", sumPnl("impermanentLossUsd"), true],
+            ["Fees earned", sumPnl("totalFeesUsd"), false],
+            ["Gas spent", gasTotal, false],
+          ] as const
+        ).map(([k, v, tone]) => (
+          <div key={k} className="bg-background p-5">
+            <dt className="eyebrow mb-2">{k}</dt>
+            <dd className={`display text-2xl sm:text-3xl tabular ${tone ? signed(v) : ""}`}>
+              {fmtUsd(v, { sign: !!tone })}
+            </dd>
+          </div>
+        ))}
+      </dl>
       <p className="text-xs text-faint mt-3">
+        {pnlPending > 0 && all.length > 0 && `Reading history for ${pnlPending} position${pnlPending === 1 ? "" : "s"}… `}
         {loadingCount > 0
           ? `Reading ${loadingCount} chain${loadingCount === 1 ? "" : "s"}…`
           : `${closed} closed position${closed === 1 ? "" : "s"} not shown.`}
@@ -110,7 +138,12 @@ export function PositionsPanel({ address }: { address: string }) {
 
       <div className="mt-6 grid grid-cols-1 gap-4">
         {shown.map((p) => (
-          <PositionCard key={p.id} p={p} />
+          <PositionCard
+            key={p.id}
+            p={p}
+            address={address}
+            onPnl={(id, pnl) => setPnls((prev) => (prev[id] ? prev : { ...prev, [id]: pnl }))}
+          />
         ))}
         {shown.length === 0 && loadingCount === 0 && (
           <div className="border border-line-soft p-10 text-center">
