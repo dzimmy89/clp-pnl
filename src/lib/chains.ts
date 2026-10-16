@@ -36,7 +36,7 @@ export interface ChainInfo {
   shortName: string;
   chainId: number;
   nativeSymbol: string;
-  /** Native token decimals; Arc uses USDC (6) for gas. */
+  /** Native token decimals. Arc uses USDC as gas but exposes it with 18 decimals natively. */
   nativeDecimals: number;
   explorer: string;
   /** Public fallback RPC; the app prefers an Alchemy URL from env when set. */
@@ -158,7 +158,7 @@ export const CHAINS: ChainInfo[] = [
     shortName: "ARC",
     chainId: 5042,
     nativeSymbol: "USDC",
-    nativeDecimals: 6,
+    nativeDecimals: 18,
     explorer: "https://explorer.arc.io",
     publicRpc: "https://rpc.mainnet.arc.io",
     // Uniswap's v3 deployment index does not list Arc; only v4 is confirmed.

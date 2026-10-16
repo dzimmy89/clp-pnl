@@ -1,8 +1,7 @@
 import { notFound } from "next/navigation";
-import { isAddress } from "viem";
-import { ChainTabs } from "@/components/ChainTabs";
+import { getAddress, isAddress } from "viem";
+import { PositionsPanel } from "@/components/PositionsPanel";
 import { WalletForm } from "@/components/WalletForm";
-import { CHAINS } from "@/lib/chains";
 
 export const instant = false;
 
@@ -11,35 +10,20 @@ export default async function WalletPage({
 }: PageProps<"/w/[address]">) {
   const { address } = await params;
   if (!isAddress(address)) notFound();
-
-  const short = `${address.slice(0, 6)}…${address.slice(-4)}`;
+  const checksummed = getAddress(address);
 
   return (
     <div className="py-12 sm:py-16">
       <p className="eyebrow mb-4">Wallet</p>
-      <h1 className="display text-4xl sm:text-6xl break-all">
-        <span className="font-mono text-2xl sm:text-3xl tracking-normal">{address}</span>
-      </h1>
+      <h1 className="font-mono text-xl sm:text-3xl break-all">{checksummed}</h1>
+
+      <div className="hairline mt-10" />
 
       <div className="mt-10">
-        <ChainTabs />
+        <PositionsPanel key={checksummed} address={checksummed} />
       </div>
 
-      <div className="hairline mt-14" />
-
-      <div className="mt-10 border border-line-soft p-8 sm:p-12 text-center">
-        <p className="eyebrow mb-4">Positions</p>
-        <p className="display text-3xl sm:text-4xl">
-          Position reading lands in the next step.
-        </p>
-        <p className="text-muted mt-4 max-w-xl mx-auto leading-relaxed">
-          This page will list every Uniswap V3 and V4 position {short} owns on{" "}
-          {CHAINS.map((c) => c.name).join(", ")}, with
-          live value, fees and range status.
-        </p>
-      </div>
-
-      <div className="mt-14 max-w-3xl">
+      <div className="mt-20 max-w-3xl">
         <p className="eyebrow mb-4">Look up a different address</p>
         <WalletForm />
       </div>
