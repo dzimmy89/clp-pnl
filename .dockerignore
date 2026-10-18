@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+.next
+out
+coverage
+deploy
+*.md
+.env*
+!.env.example
+Dockerfile
+.dockerignore
+cloudbuild.yaml

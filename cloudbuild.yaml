@@ -1,0 +1,43 @@
+# Cloud Build: build the image, push it to Artifact Registry and roll it out to Cloud Run.
+# Run by the GitHub trigger on every push to main (see deploy/gcp-setup.sh), or by hand:
+#   gcloud builds submit --config cloudbuild.yaml --substitutions=_REGION=us-central1
+#
+# The Cloud Run service keeps its environment, secrets and Cloud SQL connection between
+# deploys; the trigger only swaps the image. Change settings with `gcloud run services update`.
+substitutions:
+  _REGION: us-central1
+  _SERVICE: omnifolio
+  _REPOSITORY: omnifolio
+  _WALLETCONNECT_PROJECT_ID: ""
+  # The image tag: the commit on triggered builds; a manual `builds submit` passes _TAG itself.
+  _TAG: ${SHORT_SHA}
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+  dynamicSubstitutions: true
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}
+      - --tag=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest
+      - --build-arg=NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=${_WALLETCONNECT_PROJECT_ID}
+      - .
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args: [push, --all-tags, "${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}"]
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk:slim
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}
+      - --region=${_REGION}
+      - --platform=managed
+      - --quiet
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:${_TAG}
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPOSITORY}/${_SERVICE}:latest

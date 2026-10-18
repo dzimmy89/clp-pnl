@@ -1,43 +1,92 @@
-export function fmtUsd(v: number | null | undefined, opts: { sign?: boolean } = {}): string {
-  if (v == null || !Number.isFinite(v)) return "—";
-  const abs = Math.abs(v);
-  const digits = abs >= 1000 ? 0 : abs >= 1 || abs === 0 ? 2 : 4;
-  const s = abs.toLocaleString("en-US", { minimumFractionDigits: digits, maximumFractionDigits: digits });
-  const sign = v < 0 ? "−" : opts.sign && v > 0 ? "+" : "";
-  return `${sign}$${s}`;
+/** What a hidden amount shows instead of digits. */
+export const HIDDEN = "••••";
+
+let amountsHidden = false;
+
+/**
+ * Privacy mode: dollar values and token amounts render as dots, so the dashboard can be
+ * shown on a stream or a shared screen. Prices, rates and health factors stay visible.
+ */
+export function setAmountsHidden(hidden: boolean) {
+  amountsHidden = hidden;
 }
 
-export function fmtAmount(v: number, symbol?: string): string {
-  if (!Number.isFinite(v)) return "—";
-  const abs = Math.abs(v);
-  let s: string;
-  if (abs === 0) s = "0";
-  else if (abs >= 1_000_000) s = abs.toLocaleString("en-US", { maximumFractionDigits: 0 });
-  else if (abs >= 1000) s = abs.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  else if (abs >= 1) s = abs.toLocaleString("en-US", { maximumFractionDigits: 4 });
-  else s = abs.toLocaleString("en-US", { maximumSignificantDigits: 4 });
-  return symbol ? `${v < 0 ? "−" : ""}${s} ${symbol}` : `${v < 0 ? "−" : ""}${s}`;
+export function amountsAreHidden(): boolean {
+  return amountsHidden;
 }
 
-export function fmtPrice(v: number): string {
-  if (!Number.isFinite(v)) return "—";
-  if (v === 0) return "0";
-  if (v >= 1e9 || v < 1e-6) return v.toExponential(3);
-  if (v >= 1000) return v.toLocaleString("en-US", { maximumFractionDigits: 2 });
-  if (v >= 1) return v.toLocaleString("en-US", { maximumFractionDigits: 4 });
-  return v.toLocaleString("en-US", { maximumSignificantDigits: 5 });
+export function formatUsd(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  if (amountsHidden) return `$${HIDDEN}`;
+  return usd(value);
 }
 
-export function fmtFee(fee: number): string {
-  return `${(fee / 10_000).toLocaleString("en-US", { maximumFractionDigits: 3 })}%`;
+function usd(value: number): string {
+  const sign = value < 0 ? "−" : "";
+  const abs = Math.abs(value);
+  if (abs >= 1_000_000) {
+    return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  }
+  if (abs >= 10_000) {
+    return `${sign}$${Math.round(abs).toLocaleString("en-US")}`;
+  }
+  return `${sign}$${abs.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
-export function fmtPct(v: number | null | undefined, opts: { sign?: boolean } = {}): string {
-  if (v == null || !Number.isFinite(v)) return "—";
-  const sign = v < 0 ? "−" : opts.sign && v > 0 ? "+" : "";
-  return `${sign}${Math.abs(v).toFixed(2)}%`;
+export function formatPercent(decimal: number, digits = 2): string {
+  if (!Number.isFinite(decimal)) return "—";
+  return `${(decimal * 100).toFixed(digits)}%`;
 }
 
-export function shortAddress(a: string): string {
-  return `${a.slice(0, 6)}…${a.slice(-4)}`;
+export function formatRatio(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  return value.toFixed(2);
+}
+
+export function formatLeverage(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  return `${value.toFixed(2)}×`;
+}
+
+export function formatHealth(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  return value.toFixed(2);
+}
+
+export function formatAmount(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  if (amountsHidden) return HIDDEN;
+  const abs = Math.abs(value);
+  const digits = abs >= 1000 ? 2 : abs >= 1 ? 4 : 6;
+  return value.toLocaleString("en-US", {
+    maximumFractionDigits: digits,
+  });
+}
+
+export function formatPrice(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) return "—";
+  // A market price says nothing about the holder, so privacy mode leaves it alone.
+  if (value >= 1000) return usd(Math.round(value));
+  if (value >= 1) return usd(value);
+  return `$${value.toPrecision(3)}`;
+}
+
+export function shortAddress(value: string): string {
+  const trimmed = value.trim();
+  if (trimmed.length <= 14) return trimmed;
+  return `${trimmed.slice(0, 6)}…${trimmed.slice(-4)}`;
+}
+
+export function signedUsd(value: number): string {
+  if (!Number.isFinite(value)) return "—";
+  if (value > 0) return `+${formatUsd(value)}`;
+  return formatUsd(value);
+}
+
+export function priceTimestampLabel(unixSeconds: number | null): string {
+  if (!unixSeconds) return "timestamp unavailable";
+  return new Date(unixSeconds * 1000).toISOString().replace(".000Z", "Z");
 }
