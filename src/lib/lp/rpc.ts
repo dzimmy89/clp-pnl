@@ -43,8 +43,8 @@ function override(key: ChainKey): string | undefined {
  *   3. the chain's public RPC.
  */
 export function rpcUrl(key: ChainKey): string {
-  const custom = override(key);
-  if (custom) return custom;
+  const pinned = override(key);
+  if (pinned) return pinned;
   const alchemyKey = process.env.ALCHEMY_API_KEY;
   const slug = ALCHEMY_SLUGS[key];
   if (alchemyKey && slug) return `https://${slug}.g.alchemy.com/v2/${alchemyKey}`;

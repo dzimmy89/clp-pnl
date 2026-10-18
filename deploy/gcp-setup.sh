@@ -140,6 +140,15 @@ for role in roles/run.admin roles/artifactregistry.writer roles/logging.logWrite
 done
 gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_EMAIL" \
   --member="serviceAccount:${BUILD_EMAIL}" --role=roles/iam.serviceAccountUser >/dev/null
+# Older projects still build as the legacy Cloud Build service account; give it the same rights when it exists.
+LEGACY_BUILD_EMAIL="${PROJECT_NUMBER}@cloudbuild.gserviceaccount.com"
+if gcloud iam service-accounts describe "$LEGACY_BUILD_EMAIL" >/dev/null 2>&1; then
+  for role in roles/run.admin roles/artifactregistry.writer; do
+    gcloud projects add-iam-policy-binding "$PROJECT_ID" --member="serviceAccount:${LEGACY_BUILD_EMAIL}" --role="$role" --condition=None >/dev/null || true
+  done
+  gcloud iam service-accounts add-iam-policy-binding "$RUNTIME_EMAIL" \
+    --member="serviceAccount:${LEGACY_BUILD_EMAIL}" --role=roles/iam.serviceAccountUser >/dev/null || true
+fi
 
 say "5/6 First build and deploy"
 gcloud builds submit --config=cloudbuild.yaml \
