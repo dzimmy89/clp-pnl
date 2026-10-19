@@ -101,17 +101,26 @@ Accounts need Postgres. Set `DATABASE_URL` (any Postgres, e.g. a free Neon datab
 
 ## Deploy (Google Cloud Run, from GitHub)
 
-The app runs as one Cloud Run service built from the `Dockerfile` (Next.js standalone output), with Postgres on Cloud SQL and keys in Secret Manager. Every push to the deploy branch (`main` by default) is built by Cloud Build and rolled out; the service keeps its settings between deploys.
+The app runs as one Cloud Run service built from the `Dockerfile` (Next.js standalone output, listens on `$PORT`), with Postgres on Cloud SQL and keys in Secret Manager. CI builds the same image on every push and checks that it starts and serves `/`, `/app` and `/api/health`, so what reaches Google Cloud is already known to run. Pick one of the four paths; they all end in the same service.
 
-### Option A: the button
+### A. The Cloud Run console, no CLI
+
+1. In [Cloud Run](https://console.cloud.google.com/run), **Deploy container → Service → Continuously deploy from a repository (source or function)**, then **Set up with Cloud Build**.
+2. Connect GitHub and pick `dzimmy89/clp-pnl`, the branch to deploy (`main`), build type **Dockerfile**, location `/Dockerfile`.
+3. Allow unauthenticated invocations, 1 vCPU, 1 GiB, request timeout 300 s, max instances 3.
+4. Under **Variables & Secrets** add `AUTH_DOMAIN` (the service's host once known, e.g. `omnifolio-xxxx-uc.a.run.app`), and reference secrets for `DATABASE_URL`, `ZERION_API_KEY`, `ALCHEMY_API_KEY`, `OWNER_WALLETS` (create them in Secret Manager first; `.env.example` lists every name). Under **Connections** attach the Cloud SQL instance when the database is Cloud SQL.
+
+Every push to that branch then builds and deploys. `deploy/gcp-setup.sh` can still be run afterwards to create the database and secrets for you.
+
+### B. The button
 
 [![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/dzimmy89/clp-pnl)
 
-Opens Cloud Shell signed in as you (`hello@defiuniversity.xyz`), asks for the project, region and the keys in `app.json` (Zerion, Alchemy, owner wallets, an optional Postgres URL), builds the `Dockerfile` and deploys. Its post-create step then runs `deploy/gcp-setup.sh` with `SKIP_BUILD=1` to add Cloud SQL (unless you pasted a database URL), the secrets, the runtime service account, the `AUTH_DOMAIN` pin and the Cloud Build trigger. To deploy a branch other than `main`, add `&revision=<branch>` to the button URL.
+Opens Cloud Shell signed in as you (`hello@defiuniversity.xyz`), asks for the project, region and the keys in `app.json`, builds the `Dockerfile` and deploys. Its post-create step runs `deploy/gcp-setup.sh` with `SKIP_BUILD=1` to add Cloud SQL (unless you pasted a database URL), the secrets, the runtime service account, the `AUTH_DOMAIN` pin and the Cloud Build trigger. To deploy a branch other than `main`, add `&revision=<branch>` to the button URL.
 
-### Option B: the script
+### C. The script
 
-One-time setup, from a machine with the [gcloud CLI](https://cloud.google.com/sdk/docs/install), signed in as the project owner (`hello@defiuniversity.xyz`):
+From a machine with the [gcloud CLI](https://cloud.google.com/sdk/docs/install), signed in as the project owner:
 
 ```bash
 gcloud auth login hello@defiuniversity.xyz
@@ -125,16 +134,28 @@ OWNER_WALLETS=0xYourWallet,YourSolanaWallet \
 ./deploy/gcp-setup.sh
 ```
 
-Both paths end in the same place. The script (safe to run again) enables the APIs, creates an Artifact Registry repository, a Cloud SQL Postgres 16 instance (`db-f1-micro`; pass `DATABASE_URL` to use Neon or another Postgres instead), stores every key you exported as a secret, creates the runtime service account, builds and deploys the service, pins `AUTH_DOMAIN` to the service's host, and creates the Cloud Build trigger on `main`. The trigger needs the Cloud Build GitHub App connected to `dzimmy89/clp-pnl`; if it is not yet, the script prints the console link, and running it again finishes the step. Check a deployment at `https://<service>.run.app/api/health`.
+The script (safe to run again) enables the APIs, creates an Artifact Registry repository, a Cloud SQL Postgres 16 instance (`db-f1-micro`; pass `DATABASE_URL` to use Neon or another Postgres instead), stores every key you exported as a secret, creates the runtime service account, builds and deploys the service with `cloudbuild.yaml`, pins `AUTH_DOMAIN` to the service's host, and creates the Cloud Build trigger on `main` (`BRANCH=` picks another). The trigger needs the Cloud Build GitHub App connected to `dzimmy89/clp-pnl`; if it is not yet, the script prints the console link, and running it again finishes the step.
 
-Secrets the service reads (all optional except the database): `DATABASE_URL`, `ZERION_API_KEY`, `ALCHEMY_API_KEY`, `COINGECKO_API_KEY`, `OWNER_WALLETS`, `OWNER_READ_TOKEN`, the per-source keys and RPC overrides listed in `.env.example`. Add or rotate one later with:
+### D. GitHub Actions
+
+`.github/workflows/deploy.yml` builds and deploys through Cloud Build on every push to `main` (and on demand from the Actions tab) using the repository's own GitHub identity, so no key is stored. After path C, run once:
+
+```bash
+PROJECT_ID=defi-university-omnifolio ./deploy/gcp-github-actions.sh
+```
+
+It creates a deployer service account and a Workload Identity pool restricted to this repository and prints the three secrets to add (`GCP_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_SERVICE_ACCOUNT`). Until they exist the workflow skips itself. Optional repository variables: `GCP_REGION`, `CLOUD_RUN_SERVICE`, `ARTIFACT_REPOSITORY`, `WALLETCONNECT_PROJECT_ID`.
+
+### After the first deploy
+
+Check `https://<service>.run.app/api/health`: it reports the database, the sign-in host, whether Zerion and Alchemy keys are present, and the platform. Secrets the service reads (all optional except the database): `DATABASE_URL`, `ZERION_API_KEY`, `ALCHEMY_API_KEY`, `COINGECKO_API_KEY`, `OWNER_WALLETS`, `OWNER_READ_TOKEN`, the per-source keys and RPC overrides listed in `.env.example`. Add or rotate one later with:
 
 ```bash
 printf '%s' "$KEY" | gcloud secrets versions add ZERION_API_KEY --data-file=-
 gcloud run services update omnifolio --region=us-central1 --update-secrets=ZERION_API_KEY=ZERION_API_KEY:latest
 ```
 
-A custom domain: map it in Cloud Run (`gcloud beta run domain-mappings create --service omnifolio --domain portfolio.defiuniversity.xyz --region us-central1`, then add the DNS records it prints) and set `AUTH_DOMAIN` to it (`--update-env-vars=AUTH_DOMAIN=portfolio.defiuniversity.xyz`), since the signed-in message must name the host the browser is on. `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is inlined at build time, so it is a Cloud Build substitution (`_WALLETCONNECT_PROJECT_ID`) rather than a runtime secret.
+A custom domain: map it in Cloud Run (`gcloud beta run domain-mappings create --service omnifolio --domain portfolio.defiuniversity.xyz --region us-central1`, then add the DNS records it prints) and set `AUTH_DOMAIN` to it (`--update-env-vars=AUTH_DOMAIN=portfolio.defiuniversity.xyz`), since the signed-in message must name the host the browser is on. `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is inlined at build time, so it is a Cloud Build substitution (`_WALLETCONNECT_PROJECT_ID`) rather than a runtime secret; the console path (A) has no build arguments, so the WalletConnect button stays off there.
 
 Resources: 1 vCPU, 1 GiB, 0 to 3 instances, 300 s request timeout (a wallet with many V4 positions can take a while on first read). Sign-in and book endpoints are rate limited per IP in memory, per instance, and every response carries basic security headers (`next.config.ts`).
 

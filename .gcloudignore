@@ -1,0 +1,9 @@
+# What `gcloud builds submit` leaves out of the source upload.
+.git
+.github
+node_modules
+.next
+out
+coverage
+.env*
+!.env.example

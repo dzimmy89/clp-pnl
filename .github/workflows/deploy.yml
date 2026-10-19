@@ -1,0 +1,72 @@
+name: Deploy to Cloud Run
+
+# Builds and deploys through Cloud Build (cloudbuild.yaml) using this repository's GitHub
+# identity, so no key is stored anywhere. Set up once with ./deploy/gcp-github-actions.sh,
+# which creates the Workload Identity pool and prints the secrets to add. Runs on every push
+# to main and on demand; it does nothing until the secrets exist.
+#
+# Repository secrets: GCP_PROJECT_ID, GCP_WORKLOAD_IDENTITY_PROVIDER, GCP_SERVICE_ACCOUNT
+# (or GCP_SA_KEY with a service account key, if you must).
+# Optional repository variables: GCP_REGION (us-central1), CLOUD_RUN_SERVICE (omnifolio),
+# ARTIFACT_REPOSITORY (omnifolio), WALLETCONNECT_PROJECT_ID.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  configured:
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - id: check
+        env:
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          WIF: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          KEY: ${{ secrets.GCP_SA_KEY }}
+        run: |
+          if [ -n "$PROJECT" ] && { [ -n "$WIF" ] || [ -n "$KEY" ]; }; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "GCP_PROJECT_ID and a credential secret are not set; nothing to deploy. See deploy/gcp-github-actions.sh."
+          fi
+
+  deploy:
+    needs: configured
+    if: needs.configured.outputs.ready == 'true'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: cloud-run-deploy
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+      - name: Build and deploy with Cloud Build
+        env:
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'omnifolio' }}
+          REPOSITORY: ${{ vars.ARTIFACT_REPOSITORY || 'omnifolio' }}
+          WALLETCONNECT: ${{ vars.WALLETCONNECT_PROJECT_ID }}
+        run: |
+          gcloud builds submit --project="$PROJECT" --config=cloudbuild.yaml \
+            --substitutions="_REGION=${REGION},_SERVICE=${SERVICE},_REPOSITORY=${REPOSITORY},_WALLETCONNECT_PROJECT_ID=${WALLETCONNECT},_TAG=${GITHUB_SHA::7}" .
+      - name: Service URL
+        env:
+          PROJECT: ${{ secrets.GCP_PROJECT_ID }}
+          REGION: ${{ vars.GCP_REGION || 'us-central1' }}
+          SERVICE: ${{ vars.CLOUD_RUN_SERVICE || 'omnifolio' }}
+        run: gcloud run services describe "$SERVICE" --project="$PROJECT" --region="$REGION" --format='value(status.url)'

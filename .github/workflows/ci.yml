@@ -19,3 +19,30 @@ jobs:
       - run: npm run build
         env:
           NEXT_TELEMETRY_DISABLED: "1"
+
+  # The image Cloud Run runs: build it the way Cloud Build will, start it, and make sure it serves.
+  container:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build --tag omnifolio:ci .
+      - name: Start the container and check the routes
+        run: |
+          docker run --detach --name app --publish 8080:8080 --env PORT=8080 omnifolio:ci
+          for i in $(seq 1 40); do
+            if curl --silent --fail --output /dev/null http://127.0.0.1:8080/; then break; fi
+            sleep 2
+          done
+          status() { curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:8080$1"; }
+          echo "/         $(status /)"
+          echo "/app      $(status /app)"
+          echo "/api/health $(status /api/health)"
+          curl --silent http://127.0.0.1:8080/api/health; echo
+          test "$(status /)" = "200"
+          test "$(status /app)" = "200"
+          # No database in CI, so the health check reports it missing with a 503 and says which variable it looked for.
+          curl --silent http://127.0.0.1:8080/api/health | grep --quiet '"database":"missing"'
+      - name: Container logs
+        if: always()
+        run: docker logs app || true
