@@ -144,5 +144,52 @@
   }
   html {
     @apply font-sans;
+    /* The sticky top bar is about 4rem tall: anchored cards and focused controls scroll clear of it. */
+    scroll-padding-top: 5rem;
+  }
+
+  /* Pointer affordance and no 300ms tap delay on everything operable (Tailwind v4 resets buttons to cursor: default). */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]),
+  summary,
+  a[href],
+  label:has(> input[type="checkbox"]) {
+    cursor: pointer;
+    touch-action: manipulation;
+  }
+
+  /* One visible keyboard focus ring for every control, including the hand-rolled buttons and chips. */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+}
+
+/* Motion is a courtesy, not a requirement: honour the OS setting. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Placeholder blocks that keep a panel's height while numbers load. */
+.skeleton {
+  display: inline-block;
+  border-radius: 0.375rem;
+  background: color-mix(in oklch, var(--muted), var(--foreground) 6%);
+  animation: skeleton-pulse 1.6s ease-in-out infinite;
+}
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
   }
 }

@@ -9,7 +9,7 @@ import { assetSlices, bookTotals, borrowPowerUsed, type AssetSlice } from "@/lib
 import { liquidationLine } from "@/lib/position-view";
 import { positionAppName, type SpotHolding, type Thresholds } from "@/lib/types";
 import { NetWorthChart } from "@/components/net-worth-chart";
-import { AssetBadge, Meter, Num, Panel, SectionLabel } from "@/components/ledger-ui";
+import { AssetBadge, Meter, Num, Panel, SectionLabel, Skeleton } from "@/components/ledger-ui";
 import { CushionBar, cushionTone, TONE_TEXT } from "@/components/position-ui";
 import { cn } from "cn";
 
@@ -20,6 +20,7 @@ const OTHER_COLOR = "var(--chart-other)";
 export function PortfolioTab({
   rows,
   spot,
+  loading = false,
   btcDelta,
   history,
   example,
@@ -30,6 +31,8 @@ export function PortfolioTab({
 }: {
   rows: BookRow[];
   spot: SpotHolding[];
+  /** The first live read is still in flight: the headline shows a placeholder instead of zero. */
+  loading?: boolean;
   btcDelta: number;
   history: HistoryPoint[];
   example: boolean;
@@ -58,7 +61,9 @@ export function PortfolioTab({
           <header className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <SectionLabel>Net worth{example ? " · example" : ""}</SectionLabel>
-              <Num className="mt-1 block text-3xl font-semibold">{formatUsd(totals.netWorthUsd)}</Num>
+              <Num className="mt-1 block text-3xl font-semibold">
+                {loading ? <Skeleton className="w-40" label="Loading net worth" /> : formatUsd(totals.netWorthUsd)}
+              </Num>
               <p className="mt-1 text-xs text-muted-foreground">
                 {change == null ? (
                   "Change shows once two readings are in range"
@@ -318,7 +323,12 @@ function AssetsPanel({ slices }: { slices: AssetSlice[] }) {
             </tbody>
           </table>
           {slices.length > ASSET_ROWS ? (
-            <button type="button" className="w-full border-t border-border/60 px-5 py-2.5 text-left text-xs text-azure hover:bg-muted/40" onClick={() => setAll(!all)}>
+            <button
+              type="button"
+              aria-expanded={all}
+              className="w-full border-t border-border/60 px-5 py-2.5 text-left text-xs text-azure transition-colors hover:bg-muted/40"
+              onClick={() => setAll(!all)}
+            >
               {all ? "Show fewer" : `Show all ${slices.length}`}
             </button>
           ) : null}

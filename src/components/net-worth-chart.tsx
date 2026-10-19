@@ -13,12 +13,17 @@ function dateLabel(t: number, withTime = false): string {
   return withTime ? `${date} ${d.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" })}` : date;
 }
 
-/** Single-series area chart of net worth over time, with a crosshair tooltip. */
+/**
+ * Single-series area chart of net worth over time, with a crosshair tooltip. The chart is
+ * focusable: arrow keys walk the readings, Home and End jump to the ends, so the values are
+ * reachable without a pointer, and a text summary describes the series for screen readers.
+ */
 export function NetWorthChart({ points }: { points: HistoryPoint[] }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(640);
   const [hover, setHover] = useState<number | null>(null);
   const gradient = useId();
+  const summaryId = useId();
 
   useEffect(() => {
     const node = ref.current;
@@ -62,15 +67,39 @@ export function NetWorthChart({ points }: { points: HistoryPoint[] }) {
 
   const active = hover == null ? null : points[hover];
   const [hx, hy] = hover == null ? [0, 0] : geometry.xy[hover];
+  const first = points[0];
+  const last = points[points.length - 1];
+  const low = points.reduce((best, p) => (p.usd < best.usd ? p : best), first);
+  const high = points.reduce((best, p) => (p.usd > best.usd ? p : best), first);
+
+  function onKeyDown(event: React.KeyboardEvent<SVGSVGElement>) {
+    const step = { ArrowRight: 1, ArrowLeft: -1, ArrowUp: 1, ArrowDown: -1 }[event.key];
+    let next: number | null = null;
+    if (step != null) next = Math.max(0, Math.min(points.length - 1, (hover ?? (step > 0 ? -1 : points.length)) + step));
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = points.length - 1;
+    else if (event.key === "Escape") next = null;
+    else return;
+    event.preventDefault();
+    setHover(next);
+  }
 
   return (
     <div ref={ref} className="relative">
+      <p id={summaryId} className="sr-only">
+        Net worth from {formatUsd(first.usd)} on {dateLabel(first.t)} to {formatUsd(last.usd)} on {dateLabel(last.t)}; lowest{" "}
+        {formatUsd(low.usd)} on {dateLabel(low.t)}, highest {formatUsd(high.usd)} on {dateLabel(high.t)}. Use the arrow keys to read each point.
+      </p>
       <svg
         role="img"
-        aria-label={`Net worth from ${formatUsd(points[0].usd)} on ${dateLabel(points[0].t)} to ${formatUsd(points[points.length - 1].usd)} on ${dateLabel(points[points.length - 1].t)}`}
+        aria-label={`Net worth chart, ${points.length} readings`}
+        aria-describedby={summaryId}
+        tabIndex={0}
         width={width}
         height={HEIGHT}
-        className="block touch-none"
+        className="block touch-none rounded-lg"
+        onKeyDown={onKeyDown}
+        onBlur={() => setHover(null)}
         onPointerMove={(event) => {
           const left = event.currentTarget.getBoundingClientRect().left;
           const px = event.clientX - left;
@@ -111,6 +140,7 @@ export function NetWorthChart({ points }: { points: HistoryPoint[] }) {
       </svg>
       {active ? (
         <div
+          role="status"
           className="pointer-events-none absolute top-0 rounded-md border border-border bg-popover px-2 py-1 text-xs shadow-lg"
           style={{ left: Math.min(Math.max(hx - 60, 0), width - 130) }}
         >

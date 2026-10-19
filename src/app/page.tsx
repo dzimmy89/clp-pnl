@@ -59,7 +59,7 @@ export default function Home() {
         </div>
       </header>
 
-      <main className="flex-1">
+      <main id="main" className="flex-1">
         <section className="mx-auto grid w-full max-w-6xl gap-10 px-4 pt-16 pb-12 md:grid-cols-[1.1fr_1fr] md:items-center md:pt-24">
           <div>
             <p className="font-mono text-xs tracking-widest text-azure uppercase">EVM · Solana · NEAR</p>

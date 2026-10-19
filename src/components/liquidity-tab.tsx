@@ -10,7 +10,7 @@ import type { LpPosition } from "@/lib/lp/types";
 import { shortAddress } from "@/lib/format";
 import type { BookRow } from "@/lib/metrics";
 import type { Position, ProtocolFetch } from "@/lib/types";
-import { AssetBadge, Num, Panel, SectionLabel } from "@/components/ledger-ui";
+import { AssetBadge, Num, Panel, SectionLabel, Skeleton } from "@/components/ledger-ui";
 import { BadgeStack } from "@/components/position-ui";
 import { cn } from "cn";
 
@@ -78,7 +78,9 @@ export function LiquidityTab({
           <p className="mt-1 text-xs text-muted-foreground">claimable now</p>
         </Stat>
         <Stat label="Net PnL">
-          <Num className={cn("text-2xl font-semibold", signed(totals?.netPnlUsd))}>{totals ? fmtUsd(totals.netPnlUsd, { sign: true }) : "—"}</Num>
+          <Num className={cn("text-2xl font-semibold", signed(totals?.netPnlUsd))}>
+            {totals ? fmtUsd(totals.netPnlUsd, { sign: true }) : pending > 0 ? <Skeleton className="w-28" label="Loading net PnL" /> : "—"}
+          </Num>
           <p className="mt-1 text-xs text-muted-foreground">
             {pending > 0 ? `Reading history for ${pending} position${pending === 1 ? "" : "s"}…` : "value + fees + withdrawals − deposits − gas"}
           </p>
@@ -115,7 +117,7 @@ export function LiquidityTab({
       ) : null}
 
       {status?.message && status.status !== "skipped" ? (
-        <p className={cn("text-xs", status.status === "error" ? "text-destructive" : "text-muted-foreground")}>
+        <p role={status.status === "error" ? "alert" : undefined} className={cn("text-xs", status.status === "error" ? "text-destructive" : "text-muted-foreground")}>
           <span className="font-medium text-foreground/80">Uniswap reader:</span> {status.message}
         </p>
       ) : null}
@@ -123,7 +125,7 @@ export function LiquidityTab({
       {example ? (
         <Empty>
           The example book has no concentrated-liquidity positions.{" "}
-          <button type="button" className="text-azure hover:underline" onClick={onOpenWallets}>
+          <button type="button" className="min-h-6 text-azure hover:underline" onClick={onOpenWallets}>
             Sign in or paste an EVM address
           </button>{" "}
           to read its Uniswap V3 and V4 positions on {CHAINS.map((chain) => chain.name).join(", ")}.
@@ -264,16 +266,42 @@ function LpCard({ position, onPnl }: { position: Position & { lp: LpPosition }; 
         </div>
       </dl>
 
-      <div className="mx-5 mt-4 ml-6 border-t border-border/60 pt-4 pb-5">
+      <div className="mx-5 mt-4 ml-6 border-t border-border/60 pt-4 pb-5" aria-busy={!pnl && !error ? true : undefined}>
         {error ? (
-          <p className="text-sm text-destructive">History unavailable: {error}</p>
+          <p role="alert" className="text-sm text-destructive">
+            History unavailable: {error}
+          </p>
         ) : !pnl ? (
-          <p className="text-sm text-muted-foreground">Reading position history…</p>
+          <PnlPlaceholder />
         ) : (
           <PnlDetail pnl={pnl} lp={lp} />
         )}
       </div>
     </article>
+  );
+}
+
+/** Keeps the card's height while the history read is in flight, so the list does not jump when it lands. */
+function PnlPlaceholder() {
+  const labels = ["Net PnL", "vs. holding", "Impermanent loss", "Fees earned", "Gas spent", "Fee APR"];
+  return (
+    <div className="grid gap-4">
+      <dl className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-6">
+        {labels.map((label) => (
+          <div key={label}>
+            <dt className="text-xs text-muted-foreground">{label}</dt>
+            <dd>
+              <Num className="block text-lg font-semibold">
+                <Skeleton className="w-20" label={`Loading ${label}`} />
+              </Num>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      <p role="status" className="text-xs text-muted-foreground">
+        Reading position history from the chain…
+      </p>
+    </div>
   );
 }
 

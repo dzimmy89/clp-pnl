@@ -25,13 +25,14 @@ import {
 import { netWorthMix, riskRows, spotGroups, type RiskRow, type SpotGroup } from "@/lib/position-view";
 import type { SpotHolding, Thresholds } from "@/lib/types";
 import { appGroups, isLending, positionNetUsd, TYPE_LABEL, categoryOf, type AppGroup } from "@/lib/view-filter";
-import { AssetBadge, Num, Panel, SectionLabel } from "@/components/ledger-ui";
+import { AssetBadge, Num, Panel, SectionLabel, Skeleton } from "@/components/ledger-ui";
 import { BadgeStack, CushionBar, HealthBar, TONE_TEXT, ToneChip } from "@/components/position-ui";
 import { cn } from "cn";
 
 export function OverviewTab({
   rows,
   spot,
+  loading = false,
   alerts,
   blendedApy,
   thresholds,
@@ -45,6 +46,8 @@ export function OverviewTab({
 }: {
   rows: BookRow[];
   spot: SpotHolding[];
+  /** The first live read is still in flight: headline numbers show placeholders instead of zeros. */
+  loading?: boolean;
   alerts: DeskAlert[];
   blendedApy: number | null;
   thresholds: Thresholds;
@@ -73,7 +76,7 @@ export function OverviewTab({
       <Panel className="grid gap-0 p-0 sm:grid-cols-2 lg:grid-cols-5 lg:divide-x lg:divide-border">
         <Stat label="Net worth">
           <Num className="text-3xl font-semibold">
-            {formatUsd(totals.netWorthUsd)}
+            {loading ? <Skeleton className="w-40" label="Loading net worth" /> : formatUsd(totals.netWorthUsd)}
           </Num>
           {day ? (
             <p className="mt-1 text-xs" title={`Compared with ${new Date(day.since).toLocaleString("en-US")}`}>
@@ -103,7 +106,7 @@ export function OverviewTab({
         </Stat>
         <Stat label="Supplied">
           <Num className="text-2xl font-semibold text-azure">
-            {formatUsd(totals.suppliedUsd)}
+            {loading ? <Skeleton className="w-28" label="Loading supplied" /> : formatUsd(totals.suppliedUsd)}
           </Num>
           <p className="mt-1 text-xs text-muted-foreground">
             APY{" "}
@@ -112,7 +115,7 @@ export function OverviewTab({
         </Stat>
         <Stat label="Borrowed">
           <Num className="text-2xl font-semibold text-gold">
-            {formatUsd(totals.borrowedUsd)}
+            {loading ? <Skeleton className="w-28" label="Loading borrowed" /> : formatUsd(totals.borrowedUsd)}
           </Num>
           <p className="mt-1 text-xs text-muted-foreground">
             APY{" "}
@@ -121,8 +124,10 @@ export function OverviewTab({
         </Stat>
         <Stat label="Health factor">
           <div className="flex items-baseline gap-2">
-            <Num className={cn("text-2xl font-semibold", TONE_TEXT[tone])}>{health ? formatHealth(health.value) : "—"}</Num>
-            <ToneChip tone={tone} />
+            <Num className={cn("text-2xl font-semibold", TONE_TEXT[tone])}>
+              {loading ? <Skeleton className="w-16" label="Loading health factor" /> : health ? formatHealth(health.value) : "—"}
+            </Num>
+            {loading ? null : <ToneChip tone={tone} />}
           </div>
           {health ? (
             <>
@@ -137,7 +142,7 @@ export function OverviewTab({
         </Stat>
         <Stat label="Net APY">
           <Num className="text-2xl font-semibold">
-            {blendedApy == null ? "—" : formatPercent(blendedApy)}
+            {loading ? <Skeleton className="w-20" label="Loading net APY" /> : blendedApy == null ? "—" : formatPercent(blendedApy)}
           </Num>
           <p className="mt-1 text-xs text-muted-foreground">
             Carry {formatUsd(totals.yearlyIncomeUsd - totals.yearlyCostUsd)} /
@@ -525,7 +530,12 @@ const ROW_LIMIT = 12;
 function ShowAll({ total, expanded, onToggle }: { total: number; expanded: boolean; onToggle: () => void }) {
   if (total <= ROW_LIMIT) return null;
   return (
-    <button type="button" className="w-full border-t border-border/60 px-5 py-2.5 text-left text-xs text-azure hover:bg-muted/40" onClick={onToggle}>
+    <button
+      type="button"
+      aria-expanded={expanded}
+      className="w-full border-t border-border/60 px-5 py-2.5 text-left text-xs text-azure transition-colors hover:bg-muted/40"
+      onClick={onToggle}
+    >
       {expanded ? "Show fewer" : `Show all ${total}`}
     </button>
   );
@@ -582,7 +592,7 @@ function AppsTable({ groups, onPickApp }: { groups: AppGroup[]; onPickApp: (app:
                   </li>
                 ))}
                 <li>
-                  <button type="button" className="text-xs text-azure hover:underline" onClick={() => onPickApp(group.app)}>
+                  <button type="button" className="min-h-6 text-xs text-azure hover:underline" onClick={() => onPickApp(group.app)}>
                     Show only {group.app}
                   </button>
                 </li>

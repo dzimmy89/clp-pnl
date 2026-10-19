@@ -430,7 +430,7 @@ export function Dashboard() {
           <BrandLink compact />
           <nav
             aria-label="Sections"
-            className="order-last col-span-2 flex justify-self-center rounded-full border border-border bg-card p-1 md:order-none md:col-span-1"
+            className="order-last col-span-2 flex max-w-full justify-self-center overflow-x-auto rounded-full border border-border bg-card p-1 [scrollbar-width:none] md:order-none md:col-span-1 [&::-webkit-scrollbar]:hidden"
           >
             {TABS.map((item) => (
               <button
@@ -439,8 +439,8 @@ export function Dashboard() {
                 aria-current={tab === item.id ? "page" : undefined}
                 onClick={() => setTab(item.id)}
                 className={cn(
-                  "rounded-full px-4 py-1.5 text-sm font-medium transition-colors",
-                  tab === item.id ? "bg-gold text-primary-foreground" : "text-muted-foreground hover:text-foreground",
+                  "shrink-0 rounded-full px-3 py-1.5 text-sm font-medium whitespace-nowrap transition-colors sm:px-4",
+                  tab === item.id ? "bg-gold text-primary-foreground" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                 )}
               >
                 {item.label}
@@ -456,8 +456,8 @@ export function Dashboard() {
                   aria-pressed={mode === value}
                   onClick={() => patch({ mode: value })}
                   className={cn(
-                    "rounded-full px-3 py-1 capitalize",
-                    mode === value ? "bg-azure/20 text-azure" : "text-muted-foreground hover:text-foreground",
+                    "rounded-full px-3 py-1 capitalize transition-colors",
+                    mode === value ? "bg-azure/20 text-azure" : "text-muted-foreground hover:bg-muted/60 hover:text-foreground",
                   )}
                 >
                   {value}
@@ -495,7 +495,7 @@ export function Dashboard() {
         </div>
       </header>
 
-      <main className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6">
+      <main id="main" aria-busy={waiting || undefined} className="mx-auto flex w-full max-w-7xl flex-col gap-5 px-4 py-6">
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
@@ -541,7 +541,11 @@ export function Dashboard() {
           </div>
         </div>
 
-        {fetchError ? <p className="text-sm text-destructive">{fetchError}</p> : null}
+        {fetchError ? (
+          <p role="alert" className="rounded-xl border border-destructive/40 bg-destructive/10 px-4 py-2.5 text-sm text-destructive">
+            {fetchError}
+          </p>
+        ) : null}
         {notifyNote ? <p className="text-sm text-gold" role="status">{notifyNote}</p> : null}
 
         {mode === "live" && tracked.length > 0 && tab !== "wallets" ? (
@@ -559,19 +563,24 @@ export function Dashboard() {
         {mode === "live" && tracked.length === 0 && tab !== "wallets" ? (
           <p className="rounded-xl border border-dashed border-border px-4 py-3 text-sm text-muted-foreground">
             No wallets yet.{" "}
-            <button type="button" className="text-azure hover:underline" onClick={() => setTab("wallets")}>
+            <button type="button" className="min-h-6 text-azure hover:underline" onClick={() => setTab("wallets")}>
               Sign in or paste an address
             </button>{" "}
             to load your positions.
           </p>
         ) : null}
 
-        {waiting ? <p className="text-sm text-muted-foreground">Reading positions across your wallets…</p> : null}
+        {waiting ? (
+          <p role="status" className="text-sm text-muted-foreground">
+            Reading positions across your wallets…
+          </p>
+        ) : null}
 
         {tab === "overview" ? (
           <OverviewTab
             rows={book.rows}
             spot={spot}
+            loading={waiting}
             alerts={alerts}
             blendedApy={book.blendedApy}
             thresholds={desk.thresholds}
@@ -590,6 +599,7 @@ export function Dashboard() {
           <PortfolioTab
             rows={book.rows}
             spot={spot}
+            loading={waiting}
             btcDelta={book.totalBtcDelta}
             history={history}
             example={mode === "example"}
@@ -619,7 +629,7 @@ export function Dashboard() {
                 {lpCount > 0 ? (
                   <p className="text-sm text-muted-foreground">
                     {lpCount} Uniswap liquidity position{lpCount === 1 ? " has" : "s have"} PnL, impermanent loss, fees and gas on{" "}
-                    <button type="button" className="text-azure hover:underline" onClick={() => setTab("liquidity")}>
+                    <button type="button" className="min-h-6 text-azure hover:underline" onClick={() => setTab("liquidity")}>
                       Liquidity
                     </button>
                     .
@@ -628,7 +638,7 @@ export function Dashboard() {
                 {otherCount > 0 ? (
                   <p className="text-sm text-muted-foreground">
                     {otherCount} staking, liquidity and other position{otherCount === 1 ? " is" : "s are"} listed by app on{" "}
-                    <button type="button" className="text-azure hover:underline" onClick={() => setTab("overview")}>
+                    <button type="button" className="min-h-6 text-azure hover:underline" onClick={() => setTab("overview")}>
                       Overview
                     </button>
                     .

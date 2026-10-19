@@ -41,7 +41,7 @@ export function ViewFilterBar({
         onChange={(type) => onChange({ ...filter, type: type as ViewFilter["type"] })}
       />
       {active ? (
-        <button type="button" className="px-2 text-xs text-azure hover:underline" onClick={() => onChange(NO_FILTER)}>
+        <button type="button" className="min-h-7 px-2 text-xs text-azure hover:underline" onClick={() => onChange(NO_FILTER)}>
           Clear filters
         </button>
       ) : null}

@@ -50,3 +50,8 @@ export function Meter({ value, tone, className }: { value: number; tone: "gold" 
     </div>
   );
 }
+
+/** A placeholder the size of the number it stands in for, so panels keep their height while a read is in flight. */
+export function Skeleton({ className, label = "Loading" }: { className?: string; label?: string }) {
+  return <span role="status" aria-label={label} className={cn("skeleton h-[1em] w-24 align-middle", className)} />;
+}

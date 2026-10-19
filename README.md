@@ -73,7 +73,7 @@ npm run build
 
 ## Layout
 
-Five tabs, black with gold and blue: gold marks headline numbers and debt, blue marks supply.
+Five tabs, black with gold and blue: gold marks headline numbers and debt, blue marks supply. The interface was audited against the [UI/UX Pro Max](https://github.com/nextlevelbuilder/ui-ux-pro-max-skill) rule set; `docs/ui-ux-review.md` records what passed, what changed and what was deliberately kept.
 
 - **Overview**: net worth, supplied, borrowed, lowest health factor and net APY across every wallet; your supplies and your borrows side by side; every app position (Uniswap pools included) by app; spot holdings.
 - **Portfolio**: net worth over time (7D, 30D, 90D, All), borrowing power used, liquidation prices, a per-asset breakdown, the lending position cards with hedge targets, the price-shock scenario and alerts.
@@ -101,7 +101,15 @@ Accounts need Postgres. Set `DATABASE_URL` (any Postgres, e.g. a free Neon datab
 
 ## Deploy (Google Cloud Run, from GitHub)
 
-The app runs as one Cloud Run service built from the `Dockerfile` (Next.js standalone output), with Postgres on Cloud SQL and keys in Secret Manager. Every push to `main` is built by Cloud Build and rolled out; the service keeps its settings between deploys.
+The app runs as one Cloud Run service built from the `Dockerfile` (Next.js standalone output), with Postgres on Cloud SQL and keys in Secret Manager. Every push to the deploy branch (`main` by default) is built by Cloud Build and rolled out; the service keeps its settings between deploys.
+
+### Option A: the button
+
+[![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/dzimmy89/clp-pnl)
+
+Opens Cloud Shell signed in as you (`hello@defiuniversity.xyz`), asks for the project, region and the keys in `app.json` (Zerion, Alchemy, owner wallets, an optional Postgres URL), builds the `Dockerfile` and deploys. Its post-create step then runs `deploy/gcp-setup.sh` with `SKIP_BUILD=1` to add Cloud SQL (unless you pasted a database URL), the secrets, the runtime service account, the `AUTH_DOMAIN` pin and the Cloud Build trigger. To deploy a branch other than `main`, add `&revision=<branch>` to the button URL.
+
+### Option B: the script
 
 One-time setup, from a machine with the [gcloud CLI](https://cloud.google.com/sdk/docs/install), signed in as the project owner (`hello@defiuniversity.xyz`):
 
@@ -117,7 +125,7 @@ OWNER_WALLETS=0xYourWallet,YourSolanaWallet \
 ./deploy/gcp-setup.sh
 ```
 
-The script (safe to run again) enables the APIs, creates an Artifact Registry repository, a Cloud SQL Postgres 16 instance (`db-f1-micro`; pass `DATABASE_URL` to use Neon or another Postgres instead), stores every key you exported as a secret, creates the runtime service account, builds and deploys the service, pins `AUTH_DOMAIN` to the service's host, and creates the Cloud Build trigger on `main`. The trigger needs the Cloud Build GitHub App connected to `dzimmy89/clp-pnl`; if it is not yet, the script prints the console link, and running it again finishes the step. Check a deployment at `https://<service>.run.app/api/health`.
+Both paths end in the same place. The script (safe to run again) enables the APIs, creates an Artifact Registry repository, a Cloud SQL Postgres 16 instance (`db-f1-micro`; pass `DATABASE_URL` to use Neon or another Postgres instead), stores every key you exported as a secret, creates the runtime service account, builds and deploys the service, pins `AUTH_DOMAIN` to the service's host, and creates the Cloud Build trigger on `main`. The trigger needs the Cloud Build GitHub App connected to `dzimmy89/clp-pnl`; if it is not yet, the script prints the console link, and running it again finishes the step. Check a deployment at `https://<service>.run.app/api/health`.
 
 Secrets the service reads (all optional except the database): `DATABASE_URL`, `ZERION_API_KEY`, `ALCHEMY_API_KEY`, `COINGECKO_API_KEY`, `OWNER_WALLETS`, `OWNER_READ_TOKEN`, the per-source keys and RPC overrides listed in `.env.example`. Add or rotate one later with:
 

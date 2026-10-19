@@ -26,6 +26,8 @@
 #   SQL_INSTANCE      Cloud SQL instance name                   (default omnifolio-db)
 #   SQL_TIER          Cloud SQL machine tier                    (default db-f1-micro)
 #   AUTH_DOMAIN       Custom domain to pin sign-in to, if any   (default: the run.app host)
+#   SKIP_BUILD        Set to 1 when the service was already deployed (the Cloud Run button
+#                     does this); only the database, secrets, accounts, settings and trigger run
 #   ZERION_API_KEY, ALCHEMY_API_KEY, COINGECKO_API_KEY, OWNER_WALLETS, OWNER_READ_TOKEN,
 #   TONAPI_KEY, TONCENTER_API_KEY, TRONGRID_API_KEY, APTOS_API_KEY, KOIOS_API_KEY, JUPITER_API_KEY,
 #   ARBITRUM_RPC_URL, SOLANA_RPC_URL, SUI_RPC_URL, STARKNET_RPC_URL,
@@ -151,8 +153,12 @@ if gcloud iam service-accounts describe "$LEGACY_BUILD_EMAIL" >/dev/null 2>&1; t
 fi
 
 say "5/6 First build and deploy"
-gcloud builds submit --config=cloudbuild.yaml \
-  --substitutions="_REGION=${REGION},_SERVICE=${SERVICE},_REPOSITORY=${REPOSITORY},_WALLETCONNECT_PROJECT_ID=${WALLETCONNECT},_TAG=$(git rev-parse --short HEAD 2>/dev/null || echo manual)" .
+if [ "${SKIP_BUILD:-0}" = "1" ]; then
+  echo "SKIP_BUILD=1: keeping the image already deployed to ${SERVICE}."
+else
+  gcloud builds submit --config=cloudbuild.yaml \
+    --substitutions="_REGION=${REGION},_SERVICE=${SERVICE},_REPOSITORY=${REPOSITORY},_WALLETCONNECT_PROJECT_ID=${WALLETCONNECT},_TAG=$(git rev-parse --short HEAD 2>/dev/null || echo manual)" .
+fi
 UPDATE_ARGS=(
   --region="$REGION"
   --service-account="$RUNTIME_EMAIL"

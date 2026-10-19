@@ -1,0 +1,35 @@
+{
+  "name": "Omnifolio",
+  "description": "Every wallet, one portfolio: lending, Uniswap liquidity and spot balances across chains, read live. Built for DeFi University.",
+  "env": {
+    "ZERION_API_KEY": {
+      "description": "Reads every EVM protocol and chain through Zerion (free key at dashboard.zerion.io). Leave empty to skip.",
+      "required": false
+    },
+    "ALCHEMY_API_KEY": {
+      "description": "RPC for Uniswap V4 position discovery on Ethereum, Base, Arbitrum and BNB Chain (free key at alchemy.com). Leave empty to use public RPCs (V3 only).",
+      "required": false
+    },
+    "OWNER_WALLETS": {
+      "description": "Make the site yours alone: your wallet addresses separated by commas. Leave empty to keep it open.",
+      "required": false
+    },
+    "DATABASE_URL": {
+      "description": "Postgres for accounts. Leave empty and the post-deploy step creates a Cloud SQL instance for you; or paste a Neon connection string.",
+      "required": false
+    }
+  },
+  "options": {
+    "allow-unauthenticated": true,
+    "memory": "1Gi",
+    "cpu": "1",
+    "port": 8080,
+    "concurrency": 40,
+    "max-instances": 3
+  },
+  "hooks": {
+    "postcreate": {
+      "commands": ["./deploy/cloud-run-button-postcreate.sh"]
+    }
+  }
+}
