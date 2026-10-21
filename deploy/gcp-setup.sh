@@ -9,8 +9,9 @@
 #   0. With BILLING_ACCOUNT set: links the project to it and adds a budget with email alerts.
 #   1. Enables the APIs and creates an Artifact Registry repository for the image, keeping only
 #      the newest images so storage stays inside the free 0.5 GB.
-#   2. Uses the DATABASE_URL you give (a free Neon database, for example). Cloud SQL is not free
-#      (about $10 a month for db-f1-micro), so it is created only with CLOUD_SQL=1.
+#   2. Creates a Cloud SQL Postgres instance, database and user (about $10 a month for
+#      db-f1-micro), unless DATABASE_URL points at another Postgres. To bring data across from an
+#      old database, run deploy/gcp-import-db.sh afterwards.
 #   3. Stores DATABASE_URL and every API key you exported as Secret Manager secrets.
 #   4. Creates the runtime service account and gives Cloud Build the right to deploy.
 #   5. Builds and deploys the service, then pins AUTH_DOMAIN to its public host.
@@ -24,10 +25,9 @@
 #   GITHUB_OWNER      GitHub owner of the repo                  (default dzimmy89)
 #   GITHUB_REPO       GitHub repository name                    (default clp-pnl)
 #   BRANCH            Branch that deploys to production         (default main)
-#   DATABASE_URL      Postgres for accounts, e.g. Neon          (optional; no accounts without it)
-#   CLOUD_SQL         Set to 1 to create a paid Cloud SQL instance when DATABASE_URL is empty
+#   DATABASE_URL      Use this Postgres instead of Cloud SQL    (optional)
 #   BILLING_ACCOUNT   Billing account to link and budget, e.g. 01E44E-C71C42-B1C090 (optional)
-#   BUDGET_USD        Monthly budget that triggers the alerts      (default 1)
+#   BUDGET_USD        Monthly budget that triggers the alerts      (default 15)
 #   SQL_INSTANCE      Cloud SQL instance name                   (default omnifolio-db)
 #   SQL_TIER          Cloud SQL machine tier                    (default db-f1-micro)
 #   AUTH_DOMAIN       Custom domain to pin sign-in to, if any   (default: the run.app host)
@@ -54,7 +54,7 @@ SQL_TIER="${SQL_TIER:-db-f1-micro}"
 SQL_DATABASE="omnifolio"
 SQL_USER="omnifolio"
 RUNTIME_SA="${SERVICE}-run"
-BUDGET_USD="${BUDGET_USD:-1}"
+BUDGET_USD="${BUDGET_USD:-15}"
 WALLETCONNECT="${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}"
 
 cd "$(dirname "$0")/.."
@@ -97,7 +97,7 @@ APIS=(
   iam.googleapis.com
   cloudresourcemanager.googleapis.com
 )
-[ "${CLOUD_SQL:-0}" = "1" ] && APIS+=(sqladmin.googleapis.com)
+[ -z "${DATABASE_URL:-}" ] && APIS+=(sqladmin.googleapis.com)
 gcloud services enable "${APIS[@]}"
 gcloud artifacts repositories describe "$REPOSITORY" --location="$REGION" >/dev/null 2>&1 ||
   gcloud artifacts repositories create "$REPOSITORY" --location="$REGION" --repository-format=docker \
@@ -118,13 +118,6 @@ say "2/6 Database"
 SQL_CONNECTION=""
 if [ -n "${DATABASE_URL:-}" ]; then
   echo "Using the DATABASE_URL you provided; Cloud SQL is skipped."
-elif [ "${CLOUD_SQL:-0}" != "1" ]; then
-  if gcloud secrets describe DATABASE_URL >/dev/null 2>&1; then
-    echo "Keeping the DATABASE_URL secret already stored."
-  else
-    echo "No DATABASE_URL: the app runs without accounts. Pass a free Neon connection string as"
-    echo "DATABASE_URL (or CLOUD_SQL=1 for a paid Cloud SQL instance) and run this again to add them."
-  fi
 else
   if ! gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
     gcloud sql instances create "$SQL_INSTANCE" \
@@ -134,7 +127,8 @@ else
       --region="$REGION" \
       --storage-size=10GB \
       --storage-auto-increase \
-      --availability-type=zonal
+      --availability-type=zonal \
+      --backup-start-time=03:00
   fi
   gcloud sql databases describe "$SQL_DATABASE" --instance="$SQL_INSTANCE" >/dev/null 2>&1 ||
     gcloud sql databases create "$SQL_DATABASE" --instance="$SQL_INSTANCE"
