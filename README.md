@@ -97,7 +97,7 @@ Wallets with no public balance read (Canton, for one) can be entered under Walle
 
 To track addresses without linking them, paste any number at once in Wallets → Track addresses without linking (one per line, or separated by commas or spaces). Each address's chain is detected from its format (`src/lib/address-detect.ts`): 0x + 40 hex is EVM, base58 decoding to 32 bytes is Solana and to a 0x41-prefixed 25 bytes is Tron, `*.near`/`*.tg` or 64 hex is NEAR, `EQ…`/`UQ…` or `0:<hex>` is TON, `addr1…`/`stake1…` is Cardano, `kaspa:…` is Kaspa, other bech32 is Cosmos, and `::` marks a Canton party. 0x + 64 hex fits Sui, Aptos and Starknet, so the app asks which; `aptos:0x…` picks the chain up front. Pasted addresses, with optional labels, stay in this browser.
 
-Accounts need Postgres. Set `DATABASE_URL` (any Postgres, e.g. a free Neon database) in `.env.local`; tables are created on first use. Without it the rest of the desk works and the sign-in button reads "Accounts unavailable". In production the signed message must name the public host, and pinning it stops a request with a forged `Host` header from accepting a signature another site collected. On Vercel production this is automatic (the project's production domain). Anywhere else, or once you add a custom domain, set `AUTH_DOMAIN` to the public host (e.g. `omnifolio.xyz`).
+Accounts need Postgres. Set `DATABASE_URL` (any Postgres, e.g. a free Neon database) in `.env.local`; tables are created on first use. Without it the rest of the desk works and the sign-in button reads "Accounts unavailable". In production the signed message must name the public host, and pinning it stops a request with a forged `Host` header from accepting a signature another site collected. Set `AUTH_DOMAIN` to the public host (e.g. `omnifolio.xyz`); `deploy/gcp-setup.sh` sets it to the Cloud Run host for you.
 
 ## Deploy (Google Cloud Run, from GitHub)
 
@@ -164,19 +164,17 @@ Staying at $0: Cloud Run's free tier (2 million requests, 180,000 vCPU-seconds a
 
 Resources: 1 vCPU, 1 GiB, 0 to 3 instances, 300 s request timeout (a wallet with many V4 positions can take a while on first read). Sign-in and book endpoints are rate limited per IP in memory, per instance, and every response carries basic security headers (`next.config.ts`).
 
-## Deploy (Vercel + Neon), the alternative
+### Settings
 
-1. Import the GitHub repo at vercel.com/new. Framework, build command and output are detected; no settings needed.
-2. In the project, open **Storage**, create a **Neon** Postgres database and connect it to the project. That sets `DATABASE_URL`. Tables are created on first sign-in.
-3. Redeploy so the new variable is picked up. The app also accepts `POSTGRES_URL` or a prefixed name such as `STORAGE_DATABASE_URL`, so a custom prefix chosen in the Neon connect dialog still works. Open `/api/health` to check: it reports `database: ok`, `missing` (no variable reached this deployment) or `error` (the variable is there but the database refused). Every push to `main` deploys to production; other branches get preview URLs.
-4. With a custom domain, set `AUTH_DOMAIN` to it (no `https://`) and redeploy.
-5. For every EVM chain and protocol, add `ZERION_API_KEY` (free key from dashboard.zerion.io) and redeploy.
-6. For the WalletConnect button (phone wallets), add `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free at cloud.reown.com) and redeploy.
-7. Optional: if live prices for hand-entered tokens come back missing (CoinGecko rate-limits keyless search from shared cloud hosts), add `COINGECKO_API_KEY` (free demo key from coingecko.com/en/api) and redeploy.
-8. Optional, to make the site yours alone: set `OWNER_WALLETS` to your wallet addresses (separated by commas) and redeploy. Only those wallets can sign in, other accounts count as signed out, and the book, price and beta endpoints answer only the owner, so nobody else can use your Zerion key. Once signed in you can still link any other wallet. Leave it empty to keep the site open.
-9. Optional, with `OWNER_WALLETS` set: `OWNER_READ_TOKEN` (24+ random characters) lets a script read your whole book, risk figures included, from `GET /api/owner/book` with `Authorization: Bearer <token>`.
+Each is a Secret Manager secret on the service (see above to add or rotate one):
 
-The connection uses `prepare: false`, so Neon's pooled (PgBouncer) connection string works. Sign-in and book endpoints are rate limited per IP in memory (nonce and verify 20/min, book 30/min), and every response carries basic security headers (`next.config.ts`).
+- `ZERION_API_KEY` (free key from dashboard.zerion.io): every EVM chain and protocol.
+- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free at cloud.reown.com): the WalletConnect button for phone wallets. It is baked in at build time, so it is the `_WALLETCONNECT_PROJECT_ID` Cloud Build substitution, not a secret.
+- `COINGECKO_API_KEY` (free demo key from coingecko.com/en/api): set it if live prices for hand-entered tokens come back missing, since CoinGecko rate-limits keyless search from shared cloud hosts.
+- `OWNER_WALLETS`: your wallet addresses, separated by commas, to make the site yours alone. Only those wallets can sign in, other accounts count as signed out, and the book, price and beta endpoints answer only the owner, so nobody else can use your Zerion key. Once signed in you can still link any other wallet. Leave it empty to keep the site open.
+- `OWNER_READ_TOKEN` (24+ random characters, with `OWNER_WALLETS` set): lets a script read your whole book, risk figures included, from `GET /api/owner/book` with `Authorization: Bearer <token>`.
+
+The database connection uses `prepare: false`, so a pooled (PgBouncer) connection string works too.
 
 ## Formulas
 

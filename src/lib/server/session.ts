@@ -55,7 +55,7 @@ export async function endSession() {
 /**
  * The host the browser is on. The signed message must name it, which is what stops a
  * signature collected by another site from signing in here. Host headers come from the
- * request, so production pins the public host: AUTH_DOMAIN, or the Vercel production domain.
+ * request, so production pins the public host: AUTH_DOMAIN.
  */
 export async function siteDomain(): Promise<string> {
   const pinned = publicHost();

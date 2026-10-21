@@ -18,7 +18,7 @@ export function AccountControl({ state, onManage }: { state: AccountState; onMan
 
   if (!accountsEnabled) {
     return (
-      <Button variant="outline" disabled title="The server has no database. Connect Neon in Vercel (Storage) and redeploy; /api/health shows the status.">
+      <Button variant="outline" disabled title="The server has no database. Set DATABASE_URL on the Cloud Run service; /api/health shows the status.">
         <WalletIcon /> Accounts unavailable
       </Button>
     );

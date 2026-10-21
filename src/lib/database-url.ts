@@ -5,7 +5,7 @@ const NAME = /(^|_)(DATABASE_URL|POSTGRES_URL)$/;
 
 /**
  * The Postgres connection string, wherever the host put it. `DATABASE_URL` wins, then
- * `POSTGRES_URL`. Vercel's Neon integration can add a custom prefix (e.g.
+ * `POSTGRES_URL`. Some hosts and integrations add a custom prefix (e.g.
  * `STORAGE_DATABASE_URL`), so any other `*_DATABASE_URL` or `*_POSTGRES_URL` holding a
  * postgres:// URL is accepted too. Pooled names come before `_UNPOOLED`/`_NON_POOLING`,
  * which the NAME pattern never matches.

@@ -25,7 +25,7 @@ export interface ChainProof {
   signedMessage?: string;
   /** Any other chain-specific fields, as strings. */
   extra?: Record<string, string>;
-  /** Host the server serves (e.g. `omnifolio.vercel.app`); the proof must be bound to it. */
+  /** Host the server serves (e.g. `omnifolio-abc123-uc.a.run.app`); the proof must be bound to it. */
   domain: string;
   /** 64-hex server nonce, single use. */
   nonce: string;
