@@ -15,7 +15,7 @@
       "required": false
     },
     "DATABASE_URL": {
-      "description": "Postgres for accounts. Leave empty and the post-deploy step creates a Cloud SQL instance for you; or paste a Neon connection string.",
+      "description": "Postgres for accounts: paste a free Neon connection string. Leave empty to run without accounts (Cloud SQL costs money, so the script only creates it with CLOUD_SQL=1).",
       "required": false
     }
   },

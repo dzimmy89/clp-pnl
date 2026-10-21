@@ -101,7 +101,7 @@ Accounts need Postgres. Set `DATABASE_URL` (any Postgres, e.g. a free Neon datab
 
 ## Deploy (Google Cloud Run, from GitHub)
 
-The app runs as one Cloud Run service built from the `Dockerfile` (Next.js standalone output, listens on `$PORT`), with Postgres on Cloud SQL and keys in Secret Manager. CI builds the same image on every push and checks that it starts and serves `/`, `/app` and `/api/health`, so what reaches Google Cloud is already known to run. Pick one of the four paths; they all end in the same service.
+The app runs as one Cloud Run service built from the `Dockerfile` (Next.js standalone output, listens on `$PORT`), with Postgres on a free Neon database (Cloud SQL if you choose to pay for it) and keys in Secret Manager. CI builds the same image on every push and checks that it starts and serves `/`, `/app` and `/api/health`, so what reaches Google Cloud is already known to run. Pick one of the four paths; they all end in the same service.
 
 ### A. The Cloud Run console, no CLI
 
@@ -116,7 +116,7 @@ Every push to that branch then builds and deploys. `deploy/gcp-setup.sh` can sti
 
 [![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/dzimmy89/clp-pnl)
 
-Opens Cloud Shell signed in as you (`hello@defiuniversity.xyz`), asks for the project, region and the keys in `app.json`, builds the `Dockerfile` and deploys. Its post-create step runs `deploy/gcp-setup.sh` with `SKIP_BUILD=1` to add Cloud SQL (unless you pasted a database URL), the secrets, the runtime service account, the `AUTH_DOMAIN` pin and the Cloud Build trigger. To deploy a branch other than `main`, add `&revision=<branch>` to the button URL.
+Opens Cloud Shell signed in as you (`hello@defiuniversity.xyz`), asks for the project, region and the keys in `app.json`, builds the `Dockerfile` and deploys. Its post-create step runs `deploy/gcp-setup.sh` with `SKIP_BUILD=1` to add the secrets (the database URL included), the runtime service account, the `AUTH_DOMAIN` pin and the Cloud Build trigger. To deploy a branch other than `main`, add `&revision=<branch>` to the button URL.
 
 ### C. The script
 
@@ -126,15 +126,16 @@ From a machine with the [gcloud CLI](https://cloud.google.com/sdk/docs/install),
 gcloud auth login hello@defiuniversity.xyz
 # A project to deploy into (create one if needed and link billing):
 gcloud projects create defi-university-omnifolio --name="Omnifolio"
-gcloud billing projects link defi-university-omnifolio --billing-account=XXXXXX-XXXXXX-XXXXXX
 
 PROJECT_ID=defi-university-omnifolio \
+BILLING_ACCOUNT=XXXXXX-XXXXXX-XXXXXX \
+DATABASE_URL='postgresql://...neon.tech/neondb?sslmode=require' \
 ZERION_API_KEY=... ALCHEMY_API_KEY=... \
 OWNER_WALLETS=0xYourWallet,YourSolanaWallet \
 ./deploy/gcp-setup.sh
 ```
 
-The script (safe to run again) enables the APIs, creates an Artifact Registry repository, a Cloud SQL Postgres 16 instance (`db-f1-micro`; pass `DATABASE_URL` to use Neon or another Postgres instead), stores every key you exported as a secret, creates the runtime service account, builds and deploys the service with `cloudbuild.yaml`, pins `AUTH_DOMAIN` to the service's host, and creates the Cloud Build trigger on `main` (`BRANCH=` picks another). The trigger needs the Cloud Build GitHub App connected to `dzimmy89/clp-pnl`; if it is not yet, the script prints the console link, and running it again finishes the step.
+The script (safe to run again) links billing and adds a budget with email alerts at 10%, 50% and 100% of `BUDGET_USD` (default $1) when `BILLING_ACCOUNT` is set, enables the APIs, creates an Artifact Registry repository that keeps only the newest three images, uses the `DATABASE_URL` you pass (with `CLOUD_SQL=1` and no URL it creates a Cloud SQL Postgres 16 `db-f1-micro` instance instead, which is not free), stores every key you exported as a secret, creates the runtime service account, builds and deploys the service with `cloudbuild.yaml`, pins `AUTH_DOMAIN` to the service's host, and creates the Cloud Build trigger on `main` (`BRANCH=` picks another). The trigger needs the Cloud Build GitHub App connected to `dzimmy89/clp-pnl`; if it is not yet, the script prints the console link, and running it again finishes the step.
 
 ### D. GitHub Actions
 
@@ -156,6 +157,10 @@ gcloud run services update omnifolio --region=us-central1 --update-secrets=ZERIO
 ```
 
 A custom domain: map it in Cloud Run (`gcloud beta run domain-mappings create --service omnifolio --domain portfolio.defiuniversity.xyz --region us-central1`, then add the DNS records it prints) and set `AUTH_DOMAIN` to it (`--update-env-vars=AUTH_DOMAIN=portfolio.defiuniversity.xyz`), since the signed-in message must name the host the browser is on. `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is inlined at build time, so it is a Cloud Build substitution (`_WALLETCONNECT_PROJECT_ID`) rather than a runtime secret; the console path (A) has no build arguments, so the WalletConnect button stays off there.
+
+A free `*.web.app` address in front of the service: `firebase.json` sends every path on a Firebase Hosting site to the Cloud Run service (edit `serviceId` if you renamed it). Run `firebase projects:addfirebase <project>`, `firebase hosting:sites:create <site>`, `firebase deploy --only hosting --project <project>`, then set `AUTH_DOMAIN=<site>.web.app`. Firebase Hosting forwards only the `__session` cookie, which is the name the app uses, and it cuts requests off at 60 seconds, so a first read of a wallet with many Uniswap V4 positions can time out there while the `run.app` address keeps the 300 s limit. Firebase Hosting also takes a custom domain with free certificates, in any region.
+
+Staying at $0: Cloud Run's free tier (2 million requests, 180,000 vCPU-seconds and 360,000 GiB-seconds a month) covers one person's use while instances scale to zero; builds run on the default `e2-standard-2` machine, the one the 2,500 free Cloud Build minutes cover; Artifact Registry keeps three images inside its free 0.5 GB; Secret Manager is free for six active secret versions, a few cents a month per extra one. Neon's free plan holds the database. Cloud SQL, a minimum instance above 0, or `--no-cpu-throttling` would each start a bill.
 
 Resources: 1 vCPU, 1 GiB, 0 to 3 instances, 300 s request timeout (a wallet with many V4 positions can take a while on first read). Sign-in and book endpoints are rate limited per IP in memory, per instance, and every response carries basic security headers (`next.config.ts`).
 

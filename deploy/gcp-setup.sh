@@ -6,9 +6,11 @@
 #   PROJECT_ID=my-project ./deploy/gcp-setup.sh
 #
 # What it does (each step is safe to run again):
-#   1. Enables the APIs and creates an Artifact Registry repository for the image.
-#   2. Creates a Cloud SQL Postgres instance, database and user, unless DATABASE_URL is given
-#      (for example a Neon connection string).
+#   0. With BILLING_ACCOUNT set: links the project to it and adds a budget with email alerts.
+#   1. Enables the APIs and creates an Artifact Registry repository for the image, keeping only
+#      the newest images so storage stays inside the free 0.5 GB.
+#   2. Uses the DATABASE_URL you give (a free Neon database, for example). Cloud SQL is not free
+#      (about $10 a month for db-f1-micro), so it is created only with CLOUD_SQL=1.
 #   3. Stores DATABASE_URL and every API key you exported as Secret Manager secrets.
 #   4. Creates the runtime service account and gives Cloud Build the right to deploy.
 #   5. Builds and deploys the service, then pins AUTH_DOMAIN to its public host.
@@ -22,7 +24,10 @@
 #   GITHUB_OWNER      GitHub owner of the repo                  (default dzimmy89)
 #   GITHUB_REPO       GitHub repository name                    (default clp-pnl)
 #   BRANCH            Branch that deploys to production         (default main)
-#   DATABASE_URL      Use this Postgres instead of Cloud SQL    (optional)
+#   DATABASE_URL      Postgres for accounts, e.g. Neon          (optional; no accounts without it)
+#   CLOUD_SQL         Set to 1 to create a paid Cloud SQL instance when DATABASE_URL is empty
+#   BILLING_ACCOUNT   Billing account to link and budget, e.g. 01E44E-C71C42-B1C090 (optional)
+#   BUDGET_USD        Monthly budget that triggers the alerts      (default 1)
 #   SQL_INSTANCE      Cloud SQL instance name                   (default omnifolio-db)
 #   SQL_TIER          Cloud SQL machine tier                    (default db-f1-micro)
 #   AUTH_DOMAIN       Custom domain to pin sign-in to, if any   (default: the run.app host)
@@ -49,6 +54,7 @@ SQL_TIER="${SQL_TIER:-db-f1-micro}"
 SQL_DATABASE="omnifolio"
 SQL_USER="omnifolio"
 RUNTIME_SA="${SERVICE}-run"
+BUDGET_USD="${BUDGET_USD:-1}"
 WALLETCONNECT="${NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID:-}"
 
 cd "$(dirname "$0")/.."
@@ -59,23 +65,66 @@ gcloud config set project "$PROJECT_ID" >/dev/null
 PROJECT_NUMBER="$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT_ID}/${REPOSITORY}/${SERVICE}"
 
+if [ -n "${BILLING_ACCOUNT:-}" ]; then
+  say "0/6 Billing and budget"
+  if [ "$(gcloud billing projects describe "$PROJECT_ID" --format='value(billingEnabled)')" != "True" ]; then
+    gcloud billing projects link "$PROJECT_ID" --billing-account="$BILLING_ACCOUNT"
+  fi
+  gcloud services enable billingbudgets.googleapis.com
+  BUDGET_NAME="${PROJECT_ID} monthly"
+  if gcloud billing budgets list --billing-project="$PROJECT_ID" --billing-account="$BILLING_ACCOUNT" --format='value(displayName)' | grep -qxF "$BUDGET_NAME"; then
+    echo "Budget \"$BUDGET_NAME\" already exists."
+  else
+    # Alerts go by email to the billing account's admins. A budget warns; it never stops the service.
+    gcloud billing budgets create --billing-project="$PROJECT_ID" \
+      --billing-account="$BILLING_ACCOUNT" \
+      --display-name="$BUDGET_NAME" \
+      --budget-amount="${BUDGET_USD}USD" \
+      --filter-projects="projects/${PROJECT_ID}" \
+      --threshold-rule=percent=0.1 \
+      --threshold-rule=percent=0.5 \
+      --threshold-rule=percent=1.0 \
+      --threshold-rule=percent=1.0,basis=forecasted-spend
+  fi
+fi
+
 say "1/6 APIs and Artifact Registry"
-gcloud services enable \
-  run.googleapis.com \
-  cloudbuild.googleapis.com \
-  artifactregistry.googleapis.com \
-  secretmanager.googleapis.com \
-  sqladmin.googleapis.com \
-  iam.googleapis.com \
+APIS=(
+  run.googleapis.com
+  cloudbuild.googleapis.com
+  artifactregistry.googleapis.com
+  secretmanager.googleapis.com
+  iam.googleapis.com
   cloudresourcemanager.googleapis.com
+)
+[ "${CLOUD_SQL:-0}" = "1" ] && APIS+=(sqladmin.googleapis.com)
+gcloud services enable "${APIS[@]}"
 gcloud artifacts repositories describe "$REPOSITORY" --location="$REGION" >/dev/null 2>&1 ||
   gcloud artifacts repositories create "$REPOSITORY" --location="$REGION" --repository-format=docker \
     --description="Omnifolio images"
+# Every deploy pushes a ~200 MB image; keep the newest few so storage stays in the free tier.
+CLEANUP_POLICY="$(mktemp)"
+cat >"$CLEANUP_POLICY" <<'JSON'
+[
+  {"name": "keep-newest", "action": {"type": "Keep"}, "mostRecentVersions": {"keepCount": 3}},
+  {"name": "delete-older", "action": {"type": "Delete"}, "condition": {"tagState": "any", "olderThan": "1d"}}
+]
+JSON
+gcloud artifacts repositories set-cleanup-policies "$REPOSITORY" --location="$REGION" \
+  --policy="$CLEANUP_POLICY" --no-dry-run >/dev/null
+rm -f "$CLEANUP_POLICY"
 
 say "2/6 Database"
 SQL_CONNECTION=""
 if [ -n "${DATABASE_URL:-}" ]; then
   echo "Using the DATABASE_URL you provided; Cloud SQL is skipped."
+elif [ "${CLOUD_SQL:-0}" != "1" ]; then
+  if gcloud secrets describe DATABASE_URL >/dev/null 2>&1; then
+    echo "Keeping the DATABASE_URL secret already stored."
+  else
+    echo "No DATABASE_URL: the app runs without accounts. Pass a free Neon connection string as"
+    echo "DATABASE_URL (or CLOUD_SQL=1 for a paid Cloud SQL instance) and run this again to add them."
+  fi
 else
   if ! gcloud sql instances describe "$SQL_INSTANCE" >/dev/null 2>&1; then
     gcloud sql instances create "$SQL_INSTANCE" \

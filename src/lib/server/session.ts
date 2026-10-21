@@ -5,7 +5,17 @@ import { databaseConfigured, DatabaseNotConfiguredError } from "./db";
 import { isOwnerAccount, ownerOnly, privateSite } from "./owner";
 import { publicHost } from "@/lib/site";
 
-const COOKIE = "hl_session";
+/**
+ * `__session` is the only cookie Firebase Hosting passes through to Cloud Run, so the app can sit
+ * behind a free `*.web.app` site. Sessions set under the old name are still read until they expire.
+ */
+const COOKIE = "__session";
+const LEGACY_COOKIE = "hl_session";
+
+async function sessionToken(): Promise<string | undefined> {
+  const store = await cookies();
+  return store.get(COOKIE)?.value ?? store.get(LEGACY_COOKIE)?.value;
+}
 
 export async function startSession(accountId: string) {
   const { token, expiresAt } = await createSession(accountId);
@@ -22,7 +32,7 @@ export async function startSession(accountId: string) {
 /** The signed-in account id, or null. On a private site, only the owner's account counts as signed in. */
 export async function currentAccountId(): Promise<string | null> {
   if (!databaseConfigured()) return null;
-  const token = (await cookies()).get(COOKIE)?.value;
+  const token = await sessionToken();
   if (!token) return null;
   const accountId = await sessionAccountId(token);
   if (accountId && privateSite() && !(await isOwnerAccount(accountId))) return null;
@@ -35,10 +45,11 @@ export function requireOwner(request: Request): Promise<Response | null> {
 }
 
 export async function endSession() {
-  const store = await cookies();
-  const token = store.get(COOKIE)?.value;
+  const token = await sessionToken();
   if (token && databaseConfigured()) await deleteSession(token);
+  const store = await cookies();
   store.delete(COOKIE);
+  store.delete(LEGACY_COOKIE);
 }
 
 /**

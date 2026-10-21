@@ -11,9 +11,10 @@ substitutions:
   _WALLETCONNECT_PROJECT_ID: ""
   # The image tag: the commit on triggered builds; a manual `builds submit` passes _TAG itself.
   _TAG: ${SHORT_SHA}
+# No machineType: the default e2-standard-2 is the only one the 2,500 free build-minutes a
+# month cover. A build takes a few minutes longer than on a bigger machine and costs nothing.
 options:
   logging: CLOUD_LOGGING_ONLY
-  machineType: E2_HIGHCPU_8
   dynamicSubstitutions: true
 steps:
   - id: build

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Runs in Cloud Shell right after the "Run on Google Cloud" button has built and deployed the
-# service. Finishes the setup the button cannot do on its own: Cloud SQL (unless DATABASE_URL
-# was typed in), Secret Manager, the runtime service account, AUTH_DOMAIN, and the Cloud Build
+# service. Finishes the setup the button cannot do on its own: Secret Manager (the database URL
+# and keys typed in), the runtime service account, AUTH_DOMAIN, and the Cloud Build
 # trigger that redeploys on every push. The button exports GOOGLE_CLOUD_PROJECT,
 # GOOGLE_CLOUD_REGION and K_SERVICE, and leaves the env vars the person typed in the shell.
 set -uo pipefail
