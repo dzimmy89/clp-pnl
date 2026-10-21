@@ -1,0 +1,10 @@
+{
+  "hosting": {
+    "target": "app",
+    "public": "deploy/firebase-public",
+    "ignore": ["**/.*"],
+    "rewrites": [
+      { "source": "**", "run": { "serviceId": "omnifolio", "region": "us-central1" } }
+    ]
+  }
+}

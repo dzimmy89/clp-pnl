@@ -23,7 +23,7 @@ export async function GET() {
     }
   }
   return Response.json(
-    { ok: database === "ok", database, databaseVariable: source, detail, signInHost: publicHost() ?? null, platform: onCloudRun() ? "cloud-run" : process.env.VERCEL ? "vercel" : "node", alchemy: process.env.ALCHEMY_API_KEY ? "configured" : "missing", zerion: zerionConfigured() ? "configured" : "missing", private: privateSite() },
+    { ok: database === "ok", database, databaseVariable: source, detail, signInHost: publicHost() ?? null, platform: onCloudRun() ? "cloud-run" : "node", alchemy: process.env.ALCHEMY_API_KEY ? "configured" : "missing", zerion: zerionConfigured() ? "configured" : "missing", private: privateSite() },
     { status: database === "ok" ? 200 : 503, headers: { "cache-control": "no-store" } },
   );
 }

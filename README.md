@@ -97,7 +97,7 @@ Wallets with no public balance read (Canton, for one) can be entered under Walle
 
 To track addresses without linking them, paste any number at once in Wallets → Track addresses without linking (one per line, or separated by commas or spaces). Each address's chain is detected from its format (`src/lib/address-detect.ts`): 0x + 40 hex is EVM, base58 decoding to 32 bytes is Solana and to a 0x41-prefixed 25 bytes is Tron, `*.near`/`*.tg` or 64 hex is NEAR, `EQ…`/`UQ…` or `0:<hex>` is TON, `addr1…`/`stake1…` is Cardano, `kaspa:…` is Kaspa, other bech32 is Cosmos, and `::` marks a Canton party. 0x + 64 hex fits Sui, Aptos and Starknet, so the app asks which; `aptos:0x…` picks the chain up front. Pasted addresses, with optional labels, stay in this browser.
 
-Accounts need Postgres. Set `DATABASE_URL` (any Postgres, e.g. a free Neon database) in `.env.local`; tables are created on first use. Without it the rest of the desk works and the sign-in button reads "Accounts unavailable". In production the signed message must name the public host, and pinning it stops a request with a forged `Host` header from accepting a signature another site collected. On Vercel production this is automatic (the project's production domain). Anywhere else, or once you add a custom domain, set `AUTH_DOMAIN` to the public host (e.g. `omnifolio.xyz`).
+Accounts need Postgres. Set `DATABASE_URL` (any Postgres, e.g. a free Neon database) in `.env.local`; tables are created on first use. Without it the rest of the desk works and the sign-in button reads "Accounts unavailable". In production the signed message must name the public host, and pinning it stops a request with a forged `Host` header from accepting a signature another site collected. Set `AUTH_DOMAIN` to the public host (e.g. `omnifolio.xyz`); `deploy/gcp-setup.sh` sets it to the Cloud Run host for you.
 
 ## Deploy (Google Cloud Run, from GitHub)
 
@@ -116,7 +116,7 @@ Every push to that branch then builds and deploys. `deploy/gcp-setup.sh` can sti
 
 [![Run on Google Cloud](https://deploy.cloud.run/button.svg)](https://deploy.cloud.run/?git_repo=https://github.com/dzimmy89/clp-pnl)
 
-Opens Cloud Shell signed in as you (`hello@defiuniversity.xyz`), asks for the project, region and the keys in `app.json`, builds the `Dockerfile` and deploys. Its post-create step runs `deploy/gcp-setup.sh` with `SKIP_BUILD=1` to add Cloud SQL (unless you pasted a database URL), the secrets, the runtime service account, the `AUTH_DOMAIN` pin and the Cloud Build trigger. To deploy a branch other than `main`, add `&revision=<branch>` to the button URL.
+Opens Cloud Shell signed in as you (`hello@defiuniversity.xyz`), asks for the project, region and the keys in `app.json`, builds the `Dockerfile` and deploys. Its post-create step runs `deploy/gcp-setup.sh` with `SKIP_BUILD=1` to add the secrets (the database URL included), the runtime service account, the `AUTH_DOMAIN` pin and the Cloud Build trigger. To deploy a branch other than `main`, add `&revision=<branch>` to the button URL.
 
 ### C. The script
 
@@ -126,15 +126,21 @@ From a machine with the [gcloud CLI](https://cloud.google.com/sdk/docs/install),
 gcloud auth login hello@defiuniversity.xyz
 # A project to deploy into (create one if needed and link billing):
 gcloud projects create defi-university-omnifolio --name="Omnifolio"
-gcloud billing projects link defi-university-omnifolio --billing-account=XXXXXX-XXXXXX-XXXXXX
 
 PROJECT_ID=defi-university-omnifolio \
+BILLING_ACCOUNT=XXXXXX-XXXXXX-XXXXXX \
 ZERION_API_KEY=... ALCHEMY_API_KEY=... \
 OWNER_WALLETS=0xYourWallet,YourSolanaWallet \
 ./deploy/gcp-setup.sh
 ```
 
-The script (safe to run again) enables the APIs, creates an Artifact Registry repository, a Cloud SQL Postgres 16 instance (`db-f1-micro`; pass `DATABASE_URL` to use Neon or another Postgres instead), stores every key you exported as a secret, creates the runtime service account, builds and deploys the service with `cloudbuild.yaml`, pins `AUTH_DOMAIN` to the service's host, and creates the Cloud Build trigger on `main` (`BRANCH=` picks another). The trigger needs the Cloud Build GitHub App connected to `dzimmy89/clp-pnl`; if it is not yet, the script prints the console link, and running it again finishes the step.
+The script (safe to run again) links billing and adds a budget with email alerts at 10%, 50% and 100% of `BUDGET_USD` (default $15) when `BILLING_ACCOUNT` is set, enables the APIs, creates an Artifact Registry repository that keeps only the newest three images, creates a Cloud SQL Postgres 16 `db-f1-micro` instance with daily backups (about $10 a month; pass `DATABASE_URL` to use another Postgres instead), stores every key you exported as a secret, creates the runtime service account, builds and deploys the service with `cloudbuild.yaml`, pins `AUTH_DOMAIN` to the service's host, and creates the Cloud Build trigger on `main` (`BRANCH=` picks another). The trigger needs the Cloud Build GitHub App connected to `dzimmy89/clp-pnl`; if it is not yet, the script prints the console link, and running it again finishes the step.
+
+To bring accounts across from an old database (the earlier Neon one, for example), run this once after the setup, before signing in. It replaces the tables on Cloud SQL with the old database's:
+
+```bash
+SOURCE_DATABASE_URL='postgresql://...' PROJECT_ID=defi-university-omnifolio ./deploy/gcp-import-db.sh
+```
 
 ### D. GitHub Actions
 
@@ -157,21 +163,23 @@ gcloud run services update omnifolio --region=us-central1 --update-secrets=ZERIO
 
 A custom domain: map it in Cloud Run (`gcloud beta run domain-mappings create --service omnifolio --domain portfolio.defiuniversity.xyz --region us-central1`, then add the DNS records it prints) and set `AUTH_DOMAIN` to it (`--update-env-vars=AUTH_DOMAIN=portfolio.defiuniversity.xyz`), since the signed-in message must name the host the browser is on. `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` is inlined at build time, so it is a Cloud Build substitution (`_WALLETCONNECT_PROJECT_ID`) rather than a runtime secret; the console path (A) has no build arguments, so the WalletConnect button stays off there.
 
+A free `*.web.app` address in front of the service: `firebase.json` sends every path on a Firebase Hosting site to the Cloud Run service (edit `serviceId` if you renamed it). Run `firebase projects:addfirebase <project>`, `firebase hosting:sites:create <site> --project <project>`, `firebase target:apply hosting app <site> --project <project>` and `firebase deploy --only hosting:app --project <project>`, then set `AUTH_DOMAIN=<site>.web.app`. Firebase Hosting forwards only the `__session` cookie, which is the name the app uses, and it cuts requests off at 60 seconds, so a first read of a wallet with many Uniswap V4 positions can time out there while the `run.app` address keeps the 300 s limit. Firebase Hosting also takes a custom domain with free certificates, in any region.
+
+Cost: Cloud SQL `db-f1-micro` is the one bill, about $10 a month with its backups. Everything else stays in the free tier: Cloud Run's (2 million requests, 180,000 vCPU-seconds and 360,000 GiB-seconds a month) covers one person's use while instances scale to zero; builds run on the default `e2-standard-2` machine, the one the 2,500 free Cloud Build minutes cover; Artifact Registry keeps three images inside its free 0.5 GB; Secret Manager is free for six active secret versions, a few cents a month per extra one. A minimum instance above 0, `--no-cpu-throttling` or a bigger Cloud SQL tier would each add to the bill.
+
 Resources: 1 vCPU, 1 GiB, 0 to 3 instances, 300 s request timeout (a wallet with many V4 positions can take a while on first read). Sign-in and book endpoints are rate limited per IP in memory, per instance, and every response carries basic security headers (`next.config.ts`).
 
-## Deploy (Vercel + Neon), the alternative
+### Settings
 
-1. Import the GitHub repo at vercel.com/new. Framework, build command and output are detected; no settings needed.
-2. In the project, open **Storage**, create a **Neon** Postgres database and connect it to the project. That sets `DATABASE_URL`. Tables are created on first sign-in.
-3. Redeploy so the new variable is picked up. The app also accepts `POSTGRES_URL` or a prefixed name such as `STORAGE_DATABASE_URL`, so a custom prefix chosen in the Neon connect dialog still works. Open `/api/health` to check: it reports `database: ok`, `missing` (no variable reached this deployment) or `error` (the variable is there but the database refused). Every push to `main` deploys to production; other branches get preview URLs.
-4. With a custom domain, set `AUTH_DOMAIN` to it (no `https://`) and redeploy.
-5. For every EVM chain and protocol, add `ZERION_API_KEY` (free key from dashboard.zerion.io) and redeploy.
-6. For the WalletConnect button (phone wallets), add `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free at cloud.reown.com) and redeploy.
-7. Optional: if live prices for hand-entered tokens come back missing (CoinGecko rate-limits keyless search from shared cloud hosts), add `COINGECKO_API_KEY` (free demo key from coingecko.com/en/api) and redeploy.
-8. Optional, to make the site yours alone: set `OWNER_WALLETS` to your wallet addresses (separated by commas) and redeploy. Only those wallets can sign in, other accounts count as signed out, and the book, price and beta endpoints answer only the owner, so nobody else can use your Zerion key. Once signed in you can still link any other wallet. Leave it empty to keep the site open.
-9. Optional, with `OWNER_WALLETS` set: `OWNER_READ_TOKEN` (24+ random characters) lets a script read your whole book, risk figures included, from `GET /api/owner/book` with `Authorization: Bearer <token>`.
+Each is a Secret Manager secret on the service (see above to add or rotate one):
 
-The connection uses `prepare: false`, so Neon's pooled (PgBouncer) connection string works. Sign-in and book endpoints are rate limited per IP in memory (nonce and verify 20/min, book 30/min), and every response carries basic security headers (`next.config.ts`).
+- `ZERION_API_KEY` (free key from dashboard.zerion.io): every EVM chain and protocol.
+- `NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID` (free at cloud.reown.com): the WalletConnect button for phone wallets. It is baked in at build time, so it is the `_WALLETCONNECT_PROJECT_ID` Cloud Build substitution, not a secret.
+- `COINGECKO_API_KEY` (free demo key from coingecko.com/en/api): set it if live prices for hand-entered tokens come back missing, since CoinGecko rate-limits keyless search from shared cloud hosts.
+- `OWNER_WALLETS`: your wallet addresses, separated by commas, to make the site yours alone. Only those wallets can sign in, other accounts count as signed out, and the book, price and beta endpoints answer only the owner, so nobody else can use your Zerion key. Once signed in you can still link any other wallet. Leave it empty to keep the site open.
+- `OWNER_READ_TOKEN` (24+ random characters, with `OWNER_WALLETS` set): lets a script read your whole book, risk figures included, from `GET /api/owner/book` with `Authorization: Bearer <token>`.
+
+The database connection uses `prepare: false`, so a pooled (PgBouncer) connection string works too.
 
 ## Formulas
 
