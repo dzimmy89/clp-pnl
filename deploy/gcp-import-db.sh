@@ -29,10 +29,10 @@ say "1/3 Dump the source database"
 # --clean --if-exists drops the empty tables the app may already have created on Cloud SQL.
 docker run --rm -e SOURCE_DATABASE_URL "$PG_IMAGE" \
   sh -c 'pg_dump "$SOURCE_DATABASE_URL" --schema=public --clean --if-exists --no-owner --no-privileges --format=plain' \
-  >"$WORK/dump.sql"
+  >"$WORK/raw.sql"
 # Cloud SQL's importer runs plain SQL: drop psql meta-commands (\restrict) and settings that an
-# older server would reject.
-sed -i -e '/^\\restrict /d' -e '/^\\unrestrict /d' -e '/^SET transaction_timeout/d' "$WORK/dump.sql"
+# older server would reject. No `sed -i`, which differs between GNU and macOS.
+sed -e '/^\\restrict /d' -e '/^\\unrestrict /d' -e '/^SET transaction_timeout/d' "$WORK/raw.sql" >"$WORK/dump.sql"
 echo "  $(wc -c <"$WORK/dump.sql") bytes, $(grep -c '^COPY ' "$WORK/dump.sql" || true) tables with data"
 
 say "2/3 Upload it to a temporary bucket"
